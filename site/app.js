@@ -42,6 +42,59 @@
   const half = () => (D.meta.next_gw || D.meta.gw) <= 19 ? 1 : 2;
   const chipsLeft = (m) => Object.keys(CHIP_NAMES).filter((c) => !m.chips[`${c}_${half()}`]);
 
+  const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // Club-coloured shield with the manager's initial.
+  function crest(m, cls) {
+    const col = m && m.club && CLUB[m.club] ? CLUB[m.club][0] : '#3a4390';
+    const svg = s('svg', { viewBox: '0 0 40 46', class: `crest ${cls || ''}`, 'aria-hidden': 'true' },
+      s('path', { d: 'M20 1 38 7v15c0 12-8 19-18 23C10 41 2 34 2 22V7z', fill: col, stroke: 'rgba(255,255,255,.55)', 'stroke-width': '1.5' }),
+      s('path', { d: 'M2 30 38 12v6L5 35z', fill: 'rgba(255,255,255,.18)' }),
+      s('text', { x: 20, y: 31, 'text-anchor': 'middle', 'font-size': 24, text: (m && m.name ? m.name[0] : '?').toUpperCase() }));
+    return svg;
+  }
+  // Numbers count up the first time they are drawn.
+  const counted = new Set();
+  function countUp(el, to, key) {
+    el.textContent = to;
+    if (reduceMotion() || counted.has(key) || typeof to !== 'number' || to <= 0) return;
+    counted.add(key);
+    const from = Math.max(0, Math.round(to * 0.6)), t0 = performance.now(), dur = 900;
+    const step = (t) => { const k = Math.min(1, (t - t0) / dur); el.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  }
+  let prevPoints = null;
+
+  function renderTicker() {
+    const items = [];
+    const g = D.meta.gw;
+    const rows = D.managers.slice().sort((a, b) => a.rank - b.rank);
+    const nm = (id) => M.get(id)?.name || '?';
+    const push = (lead, rest) => items.push([lead, rest]);
+    if (D.meta.live) {
+      const top = D.managers.slice().sort((a, b) => b.gw_points - a.gw_points)[0];
+      push('LIVE', `${top.name} leads GW${g} with ${top.gw_points}`);
+    }
+    push('TOP', `${rows[0].name} leads on ${rows[0].total}, ${rows[0].total - rows[1].total} clear of ${rows[1].name}`);
+    const latest = Math.max(0, ...D.awards.map((a) => a.gw));
+    const aw = (k) => D.awards.filter((a) => a.gw === latest && a.award === k);
+    const motw = aw('motw'); if (motw.length) push(`GW${latest} STAR`, `${motw.map((a) => nm(a.id)).join(' & ')} with ${motw[0].value}`);
+    const spoon = aw('spoon'); if (spoon.length) push('WOODEN SPOON', `${spoon.map((a) => nm(a.id)).join(' & ')} on ${spoon[0].value}`);
+    const fail = aw('cap_fail'); if (fail.length) push('ARMBAND', fail.length > 2 ? `${fail.length} managers got just ${fail[0].value} from their captain` : `${fail.map((a) => nm(a.id)).join(' & ')}: ${fail[0].value} from the armband`);
+    const bench = aw('bench'); if (bench.length) push('BENCH', `${nm(bench[0].id)} left ${bench[0].value} on the bench`);
+    const best = aw('transfer_best'); if (best.length) push('TRANSFER', `${nm(best[0].id)}: ${best[0].text}`);
+    const mover = rows.filter((m) => m.last_rank && m.last_rank > m.rank).sort((a, b) => (b.last_rank - b.rank) - (a.last_rank - a.rank))[0];
+    if (mover) push('CLIMBER', `${mover.name} up ${mover.last_rank - mover.rank} to ${ord(mover.rank)}`);
+    ['CHE', 'ARS', 'LIV', 'TOT', 'MUN'].forEach((c) => {
+      const r = D.last_result[c]; const t = D.pltable.find((x) => x.team === c); if (!r || !t) return;
+      push(CLUB[c][1].toUpperCase(), `${r.res === 'W' ? 'beat' : r.res === 'L' ? 'lost to' : 'drew with'} ${(D.pltable.find((x) => x.team === r.opp) || { name: r.opp }).name} ${r.gf}-${r.ga}, now ${ord(t.pos)}`);
+    });
+    const run = $('ticker-run'); run.replaceChildren();
+    for (let k = 0; k < 2; k++) items.forEach(([a, b]) => run.append(h('span', {}, h('b', { text: a }), ` ${b}`)));
+    run.style.setProperty('--tick-dur', `${Math.max(30, items.length * 7)}s`);
+    $('ticker').hidden = !items.length;
+    $('ticker').classList.toggle('live', !!D.meta.live);
+  }
+
   const tip = $('tip');
   function showTip(ev, text) {
     tip.textContent = text; tip.hidden = false;
@@ -70,6 +123,7 @@
     if (m.next_deadline) $('deadline-time').textContent = `GW${m.next_gw} · ${fmtTime(m.next_deadline, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`;
     tick();
     $('updated').textContent = `Last change spotted ${fmtTime(m.updated_at, { weekday: 'short', hour: '2-digit', minute: '2-digit' })}.`;
+    renderTicker();
     $('contact').textContent = m.contact ? `Rather not be on here? Message ${m.contact} and you'll be removed at the next update.` : '';
   }
   function tick() {
@@ -89,8 +143,7 @@
     const gwRows = D.managers.slice().sort((a, b) => b.gw_points - a.gw_points);
     const mine = M.get(me);
     hero.append(
-      h('div', { class: 'stat feature' }, h('span', { class: 'lab', text: 'Top of the league' }), h('span', { class: 'big', text: leader.name }), h('span', { class: 'sub', text: `${leader.team} · ${leader.total} pts` })),
-      h('div', { class: 'stat' }, h('span', { class: 'lab', text: D.meta.live ? `Leading GW${D.meta.gw} (live)` : `Won GW${D.meta.gw}` }), h('span', { class: 'big', text: gwRows[0].name }), h('span', { class: 'sub', text: `${gwRows[0].gw_points} points` })),
+      h('div', { class: 'stat feature' }, h('span', { class: 'lab', text: D.meta.live ? `Leading GW${D.meta.gw} (live)` : `Won GW${D.meta.gw}` }), h('span', { class: 'big', text: gwRows[0].name }), h('span', { class: 'sub', text: `${gwRows[0].gw_points} points` })),
     );
     if (mine) {
       const gap = leader.total - mine.total;
@@ -103,8 +156,22 @@
     $('table-note').textContent = D.meta.live
       ? 'Live points include provisional bonus and automatic substitutions. Updated about every 10 minutes during matches.'
       : 'Arrows show the move since last gameweek. Dots are first-half chips still in hand.';
+    const pod = $('podium'); pod.replaceChildren();
+    [rows[1], rows[0], rows[2]].forEach((m, i) => {
+      if (!m) return;
+      const p = [2, 1, 3][i];
+      const pts = h('span', { class: 'pod-pts' });
+      pod.append(h('div', { class: `pod p${p} rise${isMe(m.id) ? ' me' : ''}`, style: null },
+        crest(m, 'pod-crest'), h('span', { class: 'pod-name', text: m.name }), h('span', { class: 'pod-team', text: m.team }),
+        h('div', { class: 'pod-block' }, h('span', { class: 'pod-pos', text: p }), pts)));
+      pod.lastChild.style.setProperty('--i', String([1, 0, 2][i]));
+      countUp(pts, m.total, `pod${m.id}`);
+    });
     const list = $('standings'); list.replaceChildren();
-    rows.forEach((m) => {
+    const bumped = new Map();
+    if (prevPoints && D.meta.live) D.managers.forEach((m) => { const was = prevPoints.get(m.id); if (was != null && m.gw_points > was) bumped.set(m.id, m.gw_points - was); });
+    prevPoints = new Map(D.managers.map((m) => [m.id, m.gw_points]));
+    rows.forEach((m, idx) => {
       const mv = (m.last_rank ?? m.rank) - m.rank;
       const cap = m.captain ? player(m.captain) : null;
       const left = chipsLeft(m);
@@ -116,11 +183,18 @@
         m.active_chip ? h('span', {}, 'Playing ', h('b', { text: CHIP_NAMES[m.active_chip] })) : null,
         m.subs && m.subs.length ? h('span', {}, 'Auto-subs ', h('b', { text: m.subs.map(([o, i]) => `${player(i).n} for ${player(o).n}`).join(', ') })) : null,
       );
-      list.append(h('li', { class: 'st' + (isMe(m.id) ? ' me' : '') },
+      const total = h('div', { class: 'st-total' });
+      const li = h('li', { class: 'st enter' + (isMe(m.id) ? ' me' : '') + (m.rank <= 3 ? ' top3' : '') + (bumped.has(m.id) ? ' bump' : '') },
         h('div', { class: 'st-rank' }, String(m.rank), h('span', { class: 'st-move ' + (mv > 0 ? 'up' : mv < 0 ? 'down' : 'flat'), text: mv > 0 ? `▲${mv}` : mv < 0 ? `▼${-mv}` : '–' })),
+        crest(m, 'st-crest'),
         h('div', { class: 'st-who' }, h('div', { class: 'st-team', text: m.team }), h('div', { class: 'st-name' }, m.name, clubBadge(m.club))),
-        h('div', { class: 'st-pts' }, h('div', { class: 'st-total', text: m.total }), h('div', { class: 'st-gw', text: `${D.meta.live ? 'Live ' : 'GW '}${m.gw_points}` })),
-        extra));
+        h('div', { class: 'st-pts' }, total, h('div', { class: 'st-gw' }, D.meta.live ? 'Live ' : 'GW ', h('b', { text: m.gw_points }))),
+        extra,
+        bumped.has(m.id) ? h('span', { class: 'plus', text: `+${bumped.get(m.id)}` }) : null);
+      li.style.setProperty('--i', String(idx));
+      if (m.club && CLUB[m.club]) li.style.setProperty('--club', CLUB[m.club][0]);
+      list.append(li);
+      countUp(total, m.total, `row${m.id}`);
     });
     setupReplay();
   }
@@ -179,6 +253,16 @@
 
   // ---------- awards ----------
   const GOOD = new Set(['motw', 'cap_hero', 'transfer_best']);
+  const ICON = {
+    motw: 'M7 4h10v4a5 5 0 0 1-10 0zM7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4M12 13v4M8 20h8',
+    spoon: 'M12 3c3 0 4 3 4 5s-2 4-4 4-4-2-4-4 1-5 4-5zM12 12v9',
+    cap_hero: 'M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.5 6.7 19.4l1.2-6L3.4 9.3l6-.7z',
+    cap_fail: 'M4 9h16v6H4zM9 9v6M15 9v6M3 20 21 4',
+    bench: 'M3 14h18M5 14v5M19 14v5M4 10h16',
+    transfer_best: 'M4 8h13l-3-3M20 16H7l3 3',
+    transfer_worst: 'M4 8h13l-3-3M20 16H7l3 3M4 4l16 16',
+    hit_backfired: 'M5 12h6M14 4l6 16M20 4 14 20',
+  };
   function renderAwards() {
     const gws = [...new Set(D.awards.map((a) => a.gw))].sort((a, b) => b - a);
     const sel = $('award-gw');
@@ -228,8 +312,11 @@
       let who = names.length > 3 ? `${names.length} managers` : names.join(' & ');
       if (names.length > 3 && k === 'cap_fail') who = `${names.length} managers (herd mentality)`;
       const what = names.length > 3 ? `${list[0].text}: ${names.join(', ')}` : list.map((a) => a.text).filter((t, i, arr) => arr.indexOf(t) === i).join(' · ');
-      const card = h('div', { class: `award ${GOOD.has(k) ? 'good' : 'bad'}${list.some((a) => isMe(a.id)) ? ' me' : ''}` },
-        h('span', { class: 'lab', text: list[0].label }), h('span', { class: 'who', text: who }), h('span', { class: 'what', text: what }));
+      const hero = k === 'motw';
+      const card = h('div', { class: `award ${GOOD.has(k) ? 'good' : 'bad'}${hero ? ' hero-card' : ''}${list.some((a) => isMe(a.id)) ? ' me' : ''}` },
+        s('svg', { viewBox: '0 0 24 24', class: 'ico', 'aria-hidden': 'true' }, s('path', { d: ICON[k] || ICON.motw })),
+        hero ? h('span', { class: 'big-pts' }, String(list[0].value), h('small', { text: 'pts' })) : null,
+        h('span', { class: 'lab', text: list[0].label }), h('span', { class: 'who', text: who }), h('span', { class: 'what', text: hero ? `Gameweek ${g}. ${M.get(list[0].id)?.team || ''}` : what }));
       const btn = h('button', { class: 'copy', type: 'button', text: 'Copy for the group' });
       btn.addEventListener('click', () => copyText(btn, `GW${g} ${list[0].label}: ${who}. ${what}`));
       card.append(btn);
@@ -281,6 +368,7 @@
       const line = `${nm(c)} ${verb} ${nm(r.opp)} ${r.gf}-${r.ga} ${r.ha === 'H' ? 'at home' : 'away'}. Now ${ord(pos.pos)} on ${pos.pts} points.`;
       const fans = D.managers.filter((m) => m.club === c).map((m) => m.name);
       const card = h('div', { class: `result ${r.res}` },
+        h('span', { class: 'res-tag', text: r.res }),
         h('span', {}, clubBadge(c), fans.length ? h('span', { class: 'fan-tag', text: `${fans.join(', ')}` }) : null),
         h('span', { class: 'score', text: `${r.ha === 'H' ? c : r.opp} ${r.ha === 'H' ? r.gf : r.ga}-${r.ha === 'H' ? r.ga : r.gf} ${r.ha === 'H' ? r.opp : c}` }),
         h('span', { class: 'line', text: line }));
@@ -327,9 +415,12 @@
       const aw = higherWins ? va > vb : va < vb, bw = higherWins ? vb > va : vb < va;
       return h('div', { class: 'vs-row' }, h('span', { class: aw ? 'win' : '', text: va }), h('span', { class: 'k', text: k }), h('span', { class: bw ? 'win' : '', text: vb }));
     };
-    const board = $('vs-board'); board.replaceChildren(
+    const board = $('vs-board');
+    board.style.setProperty('--club-a', A.club && CLUB[A.club] ? CLUB[A.club][0] : '#2a3480');
+    board.style.setProperty('--club-b', B.club && CLUB[B.club] ? CLUB[B.club][0] : '#2a3480');
+    board.replaceChildren(
       h('div', { class: 'vs-side' }, h('span', { class: 'vs-team', text: A.team }), h('span', { class: 'note', text: A.name }), h('span', { class: 'vs-big', text: A.total })),
-      h('div', { class: 'vs-mid' }, `${Math.abs(A.total - B.total)} pts`, h('br'), 'apart'),
+      h('div', { class: 'vs-mid' }, h('span', { text: Math.abs(A.total - B.total) }), 'pts apart'),
       h('div', { class: 'vs-side b' }, h('span', { class: 'vs-team', text: B.team }), h('span', { class: 'note', text: B.name }), h('span', { class: 'vs-big', text: B.total })),
       h('div', { class: 'vs-rows' },
         row('Gameweeks won', wa, wb), row('League position', ord(A.rank), ord(B.rank), false),
@@ -431,6 +522,7 @@
         h('b', { text: pl.n + (p.c ? ' (C)' : p.v ? ' (V)' : '') }), h('small', { text: `${pl.t} · £${pl.c.toFixed(1)}m` }),
         h('span', { class: 'pts', text: mult > 1 ? `${pl.gw}×${mult}` : pl.gw }),
         subbedIn.has(p.el) ? h('small', { text: 'Auto-sub in' }) : subbedOut.has(p.el) ? h('small', { text: 'Subbed off' }) : null);
+      if (CLUB[pl.t]) el.style.setProperty('--kit', CLUB[pl.t][0]);
       return el;
     };
     const xi = m.picks.filter((p) => p.slot <= 11), bench = m.picks.filter((p) => p.slot > 11);
@@ -444,7 +536,7 @@
   function openSheet() {
     const list = $('sheet-list'); list.replaceChildren();
     D.managers.slice().sort((a, b) => a.name.localeCompare(b.name)).forEach((m) => list.append(
-      h('button', { type: 'button', onclick: () => { me = m.id; store.set(ME_KEY, String(m.id)); closeSheet(); renderAll(); } }, h('b', { text: m.name }), h('span', { text: m.team }))));
+      h('button', { type: 'button', onclick: () => { me = m.id; store.set(ME_KEY, String(m.id)); closeSheet(); renderAll(); } }, crest(m), h('b', { text: m.name }), h('span', { text: m.team }))));
     $('sheet').hidden = false;
   }
   function closeSheet() { $('sheet').hidden = true; store.set(ME_KEY + '-asked', '1'); }

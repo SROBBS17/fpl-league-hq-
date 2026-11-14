@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex, nofollow">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
-  <meta name="theme-color" content="#0b1622">
+  <meta name="theme-color" content="#070a1f">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -16,7 +16,7 @@
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="icon" href="icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800&family=Barlow:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Teko:wght@500;600;700&family=Archivo:wght@400;500;600;800&display=swap">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -32,6 +32,7 @@
         <button class="me-chip" id="me-chip" type="button">Pick your team</button>
       </div>
     </div>
+    <div class="ticker" id="ticker" aria-label="League news" hidden><div class="ticker-tag">Latest</div><div class="ticker-track"><div class="ticker-run" id="ticker-run"></div></div></div>
     <div class="wrap deadline" id="deadline" hidden>
       <span class="deadline-label">Next deadline</span>
       <span class="deadline-time" id="deadline-time"></span>
@@ -44,6 +45,7 @@
     <p class="error" id="error" hidden>Couldn't load the league data. Check your connection and pull to refresh.</p>
 
     <section class="view" id="table" hidden>
+      <div class="podium" id="podium"></div>
       <div class="hero" id="hero"></div>
       <div class="section-head">
         <h2 id="table-title">The table</h2>
@@ -77,7 +79,7 @@
         <h2>Trophy cabinet</h2>
         <p class="note">Manager of the Week wins and Wooden Spoons, all season.</p>
       </div>
-      <div class="card"><table class="tbl" id="cabinet"><thead><tr><th class="l">Manager</th><th>Weekly wins</th><th>Spoons</th><th>Best week</th></tr></thead><tbody></tbody></table></div>
+      <div class="card scroll"><table class="tbl" id="cabinet"><thead><tr><th class="l">Manager</th><th>Weekly wins</th><th>Spoons</th><th>Best week</th></tr></thead><tbody></tbody></table></div>
       <div class="section-head">
         <h2 id="month-title">Manager of the Month</h2>
         <p class="note" id="month-note"></p>
