@@ -103,11 +103,11 @@
     },
     "8902220": {
       "skin": "#f1c6a8",
-      "hair": "#5a3e28",
-      "style": "quiff",
-      "facial": "none",
-      "mouth": "grin",
-      "round": true
+      "hair": "#b58e55",
+      "style": "swept",
+      "facial": "stubble",
+      "facialColor": "#8a6a44",
+      "mouth": "grin"
     }
   }
 }
