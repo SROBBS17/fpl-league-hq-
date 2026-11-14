@@ -45,6 +45,13 @@ def provisional_bonus(fixtures):
     """Bonus from BPS for started fixtures whose bonus isn't confirmed yet: {element: bonus}."""
     out = {}
     for f in fixtures:
+        out.update(fixture_bonus(f))
+    return out
+
+
+def fixture_bonus(f):
+    out = {}
+    for f in [f]:
         if not f["started"]:
             continue
         stats = {s["identifier"]: s for s in f["stats"]}
@@ -304,7 +311,39 @@ def main():
                      done=f["finished"] or f["finished_provisional"], mins=f["minutes"])
                 for f in F if f["event"] and (f["event"] == gw or start <= f["event"] < start + 6)]
 
+    STAT_KEYS = {"goals_scored": "goal", "assists": "assist", "own_goals": "own_goal", "penalties_saved": "pen_save",
+                 "penalties_missed": "pen_miss", "red_cards": "red", "yellow_cards": "yellow"}
+    match = []
+    event_els = set()
+    for f in sorted(cur_fx, key=lambda f: f["kickoff_time"] or ""):
+        evs = []
+        for st in f["stats"]:
+            kind = STAT_KEYS.get(st["identifier"])
+            if not kind:
+                continue
+            for side in ("h", "a"):
+                for r in st[side]:
+                    evs.append(dict(t=kind, el=r["element"], n=r["value"], side=side))
+                    event_els.add(r["element"])
+        stats = {x["identifier"]: x for x in f["stats"]}
+        confirmed = stats.get("bonus") and (stats["bonus"]["a"] or stats["bonus"]["h"])
+        bonus = []
+        if confirmed:
+            for side in ("h", "a"):
+                bonus += [dict(el=r["element"], b=r["value"], prov=False) for r in stats["bonus"][side]]
+        elif f["started"]:
+            bonus = [dict(el=e, b=b, prov=True) for e, b in fixture_bonus(f).items()]
+        event_els |= {b["el"] for b in bonus}
+        match.append(dict(id=f["id"], h=T[f["team_h"]], a=T[f["team_a"]], hs=f["team_h_score"], as_=f["team_a_score"],
+                          ko=f["kickoff_time"], started=f["started"], done=f["finished"] or f["finished_provisional"],
+                          mins=f["minutes"], events=evs, bonus=sorted(bonus, key=lambda b: -b["b"])))
+    for e in event_els:
+        if str(e) not in players and e in P:
+            players[str(e)] = dict(n=P[e]["web_name"], t=T[P[e]["team"]], p=el_type[e], c=P[e]["now_cost"] / 10, s=P[e]["status"],
+                                   news=P[e]["news"], gw=cur_pts.get(e, 0), min=cur_min.get(e, 0), form=P[e]["form"], tot=P[e]["total_points"])
+
     data = dict(
+        match=match,
         meta=dict(title=CFG.get("site_title") or L["league"]["name"], league=L["league"]["name"], contact=CFG.get("contact", ""),
                   gw=gw, gw_finished=bool(cur and cur["finished"]), live=live_mode, next_gw=nxt["id"] if nxt else None,
                   next_deadline=nxt["deadline_time"] if nxt else None, finished_gws=finished_gws),

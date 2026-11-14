@@ -544,11 +544,374 @@
     $('squad-note').textContent = `${m.team} · ${D.meta.live ? 'live' : `GW${D.meta.gw}`} ${m.gw_points} pts · bank £${m.bank.toFixed(1)}m · ${m.free_transfers} free transfer${m.free_transfers === 1 ? '' : 's'} · squad £${value.toFixed(1)}m`;
   }
 
+  // ---------- shareable images ----------
+  async function shareImage(draw, filename, text) {
+    try { await Promise.all([document.fonts.load('700 100px Teko'), document.fonts.load('600 30px Archivo'), document.fonts.load('800 30px Archivo')]); } catch (e) { /* fall back to system fonts */ }
+    const c = document.createElement('canvas'); c.width = 1080; c.height = 1350;
+    draw(c.getContext('2d'), 1080, 1350);
+    const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+    if (!blob) return;
+    const file = new File([blob], filename, { type: 'image/png' });
+    try {
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], text }); return; }
+    } catch (e) { if (e && e.name === 'AbortError') return; }
+    const img = $('share-img');
+    if (img.dataset.url) URL.revokeObjectURL(img.dataset.url);
+    img.dataset.url = URL.createObjectURL(blob); img.src = img.dataset.url;
+    $('share-preview').hidden = false;
+  }
+  $('share-close').addEventListener('click', () => { $('share-preview').hidden = true; });
+  const TEKO = (px) => `700 ${px}px Teko, "Arial Narrow", Impact, sans-serif`;
+  const ARCH = (px, w = 600) => `${w} ${px}px Archivo, system-ui, sans-serif`;
+  function fill(g, text, x, y, font, color, align = 'center', maxW) {
+    g.font = font; g.fillStyle = color; g.textAlign = align; g.textBaseline = 'alphabetic';
+    if (maxW) { let size = parseInt(font.match(/(\d+)px/)[1], 10); while (g.measureText(text).width > maxW && size > 20) { size -= 4; g.font = font.replace(/\d+px/, `${size}px`); } }
+    g.fillText(text, x, y);
+  }
+  function stadium(g, W, H, a, b) {
+    const lg = g.createLinearGradient(0, 0, W * .4, H); lg.addColorStop(0, a); lg.addColorStop(1, b); g.fillStyle = lg; g.fillRect(0, 0, W, H);
+    [[W * .1, -H * .05, 'rgba(255,255,255,.28)'], [W * .95, -H * .08, 'rgba(255,191,31,.22)']].forEach(([x, y, col]) => {
+      const rg = g.createRadialGradient(x, y, 10, x, y, W * .9); rg.addColorStop(0, col); rg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = rg; g.fillRect(0, 0, W, H);
+    });
+    g.save(); g.globalAlpha = .07; g.fillStyle = '#fff';
+    g.beginPath(); g.moveTo(0, 0); g.lineTo(W * .18, 0); g.lineTo(W * .7, H); g.lineTo(W * .36, H); g.fill();
+    g.beginPath(); g.moveTo(W, 0); g.lineTo(W * .82, 0); g.lineTo(W * .3, H); g.lineTo(W * .64, H); g.fill(); g.restore();
+  }
+  function footer(g, W, H) {
+    g.fillStyle = '#ffbf1f'; g.beginPath(); g.moveTo(60, H - 118); g.lineTo(W - 60, H - 118); g.lineTo(W - 72, H - 112); g.lineTo(60, H - 112); g.fill();
+    fill(g, `${D.meta.title.toUpperCase()} · LEAGUE HQ`, W / 2, H - 60, TEKO(44), 'rgba(255,255,255,.85)');
+  }
+
+  // ---------- walkout intro ----------
+  function playIntro(done) {
+    const today = new Date().toISOString().slice(0, 10);
+    if (reduceMotion() || store.get('lmbyf-intro') === today) { done(); return; }
+    store.set('lmbyf-intro', today);
+    const el = $('intro');
+    $('intro-name').textContent = D.meta.title;
+    $('intro-kicker').textContent = D.meta.live ? `Gameweek ${D.meta.gw} · Live` : `Gameweek ${D.meta.next_gw || D.meta.gw}`;
+    el.hidden = false;
+    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('play')));
+    let ended = false;
+    const end = () => { if (ended) return; ended = true; el.classList.add('out'); setTimeout(() => { el.hidden = true; el.classList.remove('play', 'out'); done(); }, 450); };
+    el.addEventListener('click', end, { once: true });
+    setTimeout(end, 2100);
+  }
+
+  // ---------- Gameweek Wrapped ----------
+  function lastFinished() { const f = D.meta.finished_gws; return f.length ? f[f.length - 1] : null; }
+  function wrappedData(id) {
+    const g = lastFinished(); if (!g) return null;
+    const rows = D.history.filter((r) => r.gw === g), prev = D.history.filter((r) => r.gw === g - 1);
+    const mine = rows.find((r) => r.id === id); if (!mine) return null;
+    const myPrev = prev.find((r) => r.id === id);
+    const before = myPrev ? myPrev.rank : mine.rank, after = mine.rank;
+    const was = (rid) => prev.find((q) => q.id === rid)?.rank;
+    const overtook = myPrev ? rows.filter((r) => r.id !== id && was(r.id) < before && r.rank > after).map((r) => M.get(r.id).name) : [];
+    const passedBy = myPrev ? rows.filter((r) => r.id !== id && was(r.id) > before && r.rank < after).map((r) => M.get(r.id).name) : [];
+    const capCount = rows.filter((r) => r.captain && r.captain === mine.captain).length - 1;
+    return {
+      g, mine, m: M.get(id), n: rows.length,
+      beat: rows.filter((r) => r.id !== id && r.points < mine.points).length,
+      avg: Math.round(rows.reduce((a, r) => a + r.points, 0) / rows.length),
+      weekRank: 1 + rows.filter((r) => r.points > mine.points).length,
+      before, after, overtook, passedBy,
+      cap: mine.captain ? player(mine.captain).n : null, capPts: mine.captain_pts, capCount: Math.max(0, capCount),
+      tr: D.transfers.filter((t) => t.id === id && t.gw === g),
+      awards: D.awards.filter((a) => a.gw === g && a.id === id),
+    };
+  }
+  function wrappedCards(w) {
+    const card = (bg, ...kids) => {
+      const c = h('div', { class: 'w-card' }, ...kids); c.style.setProperty('--wbg', bg);
+      let d = 0; c.querySelectorAll('.pop').forEach((el) => { el.style.setProperty('--d', String(d)); d += 170; });
+      return c;
+    };
+    const cards = [];
+    cards.push(card('radial-gradient(80% 60% at 20% 10%, #7a3cff, transparent), radial-gradient(70% 60% at 90% 90%, #ff2e8a, transparent), #120a3a',
+      h('span', { class: 'w-eyebrow pop', text: `Gameweek ${w.g}` }), h('span', { class: 'w-big pop', text: 'Wrapped' }),
+      h('span', { class: 'w-line pop', text: `${w.m.name}, here's how your week went.` }), h('span', { class: 'w-sub pop', text: `${w.m.team}. Tap to go on.` })));
+    const beatLine = w.beat === w.n - 1 ? 'Nobody scored more. Take a bow.' : w.beat === 0 ? 'Every single one of them beat you.' : `You beat ${w.beat} of the other ${w.n - 1}.`;
+    cards.push(card('radial-gradient(90% 60% at 80% 0%, #33d6ff, transparent), radial-gradient(80% 60% at 0% 100%, #1d3cff, transparent), #071040',
+      h('span', { class: 'w-eyebrow pop', text: 'You scored' }), h('span', { class: 'w-huge pop', 'data-count': w.mine.points, text: w.mine.points }),
+      h('span', { class: 'w-line pop', text: beatLine }), h('span', { class: 'w-sub pop', text: `League average ${w.avg}. ${ord(w.weekRank)} best score this week.` })));
+    const mv = w.before - w.after;
+    cards.push(card(mv > 0 ? 'radial-gradient(90% 70% at 50% 0%, #22e6a8, transparent), #04291f' : mv < 0 ? 'radial-gradient(90% 70% at 50% 0%, #ff3d6e, transparent), #2a0614' : 'radial-gradient(90% 70% at 50% 0%, #6b75b8, transparent), #0d1235',
+      h('span', { class: 'w-eyebrow pop', text: 'League position' }),
+      h('span', { class: 'w-arrow pop', text: mv > 0 ? `▲ ${mv}` : mv < 0 ? `▼ ${-mv}` : '=' }),
+      h('span', { class: 'w-huge pop', text: ord(w.after) }),
+      h('span', { class: 'w-line pop', text: mv > 0 ? `Up from ${ord(w.before)}.` : mv < 0 ? `Down from ${ord(w.before)}.` : 'Holding your ground.' }),
+      w.overtook.length ? h('span', { class: 'w-sub pop', text: `You overtook ${w.overtook.join(', ')}.` }) : null,
+      w.passedBy.length ? h('span', { class: 'w-sub pop', text: `Overtaken by ${w.passedBy.join(', ')}.` }) : null));
+    if (w.cap) {
+      const verdict = w.capPts >= 20 ? 'An absolute haul.' : w.capPts >= 12 ? 'Solid return.' : w.capPts >= 6 ? 'Did a job.' : 'Armband blank. Ouch.';
+      cards.push(card('radial-gradient(90% 70% at 10% 10%, #ffbf1f, transparent), radial-gradient(70% 60% at 100% 100%, #ff8a00, transparent), #2a1600',
+        h('span', { class: 'w-eyebrow pop', text: 'Your captain' }), h('span', { class: 'w-big pop', text: w.cap }),
+        h('span', { class: 'w-huge pop', 'data-count': w.capPts, text: w.capPts }), h('span', { class: 'w-line pop', text: verdict }),
+        h('span', { class: 'w-sub pop', text: w.capCount ? `${w.capCount} other${w.capCount > 1 ? 's' : ''} picked the same captain.` : 'Nobody else went with that pick. Bold.' })));
+    }
+    const chipTr = w.tr.find((t) => ['wildcard', 'freehit'].includes(t.chip));
+    const normal = w.tr.filter((t) => !['wildcard', 'freehit'].includes(t.chip));
+    const net = normal.reduce((a, t) => a + t.pts_in - t.pts_out, 0) - w.mine.hit;
+    cards.push(card('radial-gradient(90% 70% at 90% 10%, #7a3cff, transparent), radial-gradient(80% 60% at 0% 100%, #33d6ff, transparent), #0b0a35',
+      h('span', { class: 'w-eyebrow pop', text: 'Transfers' }),
+      chipTr ? h('span', { class: 'w-big pop', text: CHIP_NAMES[chipTr.chip] }) : !normal.length ? h('span', { class: 'w-big pop', text: 'No moves' }) : h('span', { class: 'w-huge pop', text: net > 0 ? `+${net}` : net }),
+      normal.length && !chipTr ? h('div', { class: 'w-list pop' }, normal.map((t) => h('div', {}, h('span', { text: `${player(t.el_out).n} → ${player(t.el_in).n}` }), h('b', { text: (t.pts_in - t.pts_out > 0 ? '+' : '') + (t.pts_in - t.pts_out) })))) : null,
+      h('span', { class: 'w-line pop', text: chipTr ? `${w.tr.length} changes in one go.` : !normal.length ? 'Rolled the transfer.' : net > 0 ? 'Points gained from your moves.' : net < 0 ? 'Your moves cost you this week.' : 'Your moves broke even.' }),
+      w.mine.hit ? h('span', { class: 'w-sub pop', text: `Includes a -${w.mine.hit} hit.` }) : null));
+    cards.push(card(w.awards.some((a) => GOOD.has(a.award)) ? 'radial-gradient(90% 70% at 50% 0%, #fff3c4, transparent), radial-gradient(90% 70% at 50% 100%, #d99100, transparent), #4a2c00' : 'radial-gradient(90% 70% at 50% 0%, #ff3d6e, transparent), #1a0618',
+      h('span', { class: 'w-eyebrow pop', text: 'Awards' }),
+      w.awards.length ? h('div', { class: 'w-list pop' }, w.awards.map((a) => h('div', {}, h('span', { text: a.label }), h('b', { text: GOOD.has(a.award) ? 'WON' : 'OOF' })))) : h('span', { class: 'w-big pop', text: 'Nothing' }),
+      h('span', { class: 'w-line pop', text: w.awards.length ? 'Your silverware (and shame) this week.' : 'No trophies, no spoons. Quietly anonymous.' }),
+      h('span', { class: 'w-sub pop', text: `${w.mine.bench} points left on your bench.` })));
+    const btn = h('button', { class: 'btn w-share pop', type: 'button', text: 'Share to the group' });
+    btn.addEventListener('click', (e) => { e.stopPropagation(); shareWrapped(w); });
+    cards.push(card('radial-gradient(80% 60% at 0% 0%, #ff2e8a, transparent), radial-gradient(80% 60% at 100% 100%, #33d6ff, transparent), #150a40',
+      h('span', { class: 'w-eyebrow pop', text: `GW${w.g} in one picture` }), h('span', { class: 'w-big pop', text: w.m.name }),
+      h('div', { class: 'w-list pop' },
+        h('div', {}, h('span', { text: 'Points' }), h('b', { text: w.mine.points })),
+        h('div', {}, h('span', { text: 'League position' }), h('b', { text: `${ord(w.after)}${mv ? (mv > 0 ? ` ▲${mv}` : ` ▼${-mv}`) : ''}` })),
+        w.cap ? h('div', {}, h('span', { text: `Captain ${w.cap}` }), h('b', { text: w.capPts })) : null,
+        h('div', {}, h('span', { text: 'Beat this week' }), h('b', { text: `${w.beat}/${w.n - 1}` }))),
+      btn));
+    return cards;
+  }
+  function shareWrapped(w) {
+    const mv = w.before - w.after;
+    shareImage((g, W, H) => {
+      stadium(g, W, H, '#2a0f6e', '#07051f');
+      const rg = g.createRadialGradient(W, H, 10, W, H, W); rg.addColorStop(0, 'rgba(255,46,138,.45)'); rg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = rg; g.fillRect(0, 0, W, H);
+      fill(g, `GAMEWEEK ${w.g} WRAPPED`, W / 2, 150, TEKO(70), '#ffbf1f');
+      fill(g, w.m.name.toUpperCase(), W / 2, 300, TEKO(170), '#ffffff', 'center', W - 120);
+      fill(g, w.m.team, W / 2, 360, ARCH(36), 'rgba(255,255,255,.75)', 'center', W - 120);
+      fill(g, String(w.mine.points), W / 2, 700, TEKO(380), '#ffffff');
+      fill(g, 'POINTS', W / 2, 770, TEKO(64), 'rgba(255,255,255,.7)');
+      const stats = [[`${ord(w.after)}${mv > 0 ? ` ▲${mv}` : mv < 0 ? ` ▼${-mv}` : ''}`, 'IN THE LEAGUE'], [w.cap ? `${w.capPts}` : '–', w.cap ? `FROM ${w.cap.toUpperCase()} (C)` : 'NO CAPTAIN'], [`${w.beat}/${w.n - 1}`, 'BEATEN THIS WEEK']];
+      stats.forEach(([v, k], i) => {
+        const y = 900 + i * 110;
+        g.fillStyle = 'rgba(255,255,255,.1)'; g.fillRect(110, y - 72, W - 220, 92);
+        fill(g, v, 150, y, TEKO(84), '#ffbf1f', 'left');
+        fill(g, k, W - 150, y - 8, TEKO(46), '#ffffff', 'right', 520);
+      });
+      footer(g, W, H);
+    }, `gw${w.g}-wrapped-${w.m.name}.png`, `My GW${w.g} Wrapped`);
+  }
+  let wState = null;
+  function openWrapped(id) {
+    const w = wrappedData(id); if (!w) return;
+    const cards = wrappedCards(w);
+    wState = { cards, i: 0, timer: null };
+    $('w-bars').replaceChildren(...cards.map(() => h('span', {}, h('i'))));
+    $('wrapped').hidden = false; document.body.style.overflow = 'hidden';
+    store.set('lmbyf-wrapped', String(w.g));
+    showW(0);
+  }
+  function showW(i) {
+    if (!wState) return;
+    const n = wState.cards.length;
+    if (i >= n) { closeWrapped(); return; }
+    i = Math.max(0, i); wState.i = i; clearTimeout(wState.timer);
+    $('w-stage').replaceChildren(wState.cards[i]);
+    [...$('w-bars').children].forEach((b, k) => { b.className = ''; void b.offsetWidth; b.className = k < i ? 'done' : k === i ? 'on' : ''; });
+    wState.cards[i].querySelectorAll('[data-count]').forEach((el) => {
+      const to = +el.dataset.count; if (reduceMotion() || to <= 0) { el.textContent = to; return; }
+      const t0 = performance.now(); const stepf = (t) => { const k = Math.min(1, (t - t0) / 1100); el.textContent = Math.round(to * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(stepf); }; requestAnimationFrame(stepf);
+    });
+    if (i < n - 1) wState.timer = setTimeout(() => showW(i + 1), 6000);
+  }
+  function closeWrapped() { if (!wState) return; clearTimeout(wState.timer); wState = null; $('wrapped').hidden = true; document.body.style.overflow = ''; }
+  $('w-next').addEventListener('click', () => wState && showW(wState.i + 1));
+  $('w-prev').addEventListener('click', () => wState && showW(wState.i - 1));
+  $('w-close').addEventListener('click', closeWrapped);
+  document.addEventListener('keydown', (e) => {
+    if (!wState) return;
+    if (e.key === 'Escape') closeWrapped(); else if (e.key === 'ArrowRight') showW(wState.i + 1); else if (e.key === 'ArrowLeft') showW(wState.i - 1);
+  });
+  function renderWrappedCta() {
+    const g = lastFinished(); const btn = $('wrapped-cta');
+    if (!g) { btn.hidden = true; return; }
+    btn.hidden = false;
+    btn.replaceChildren(h('span', {}, `Your GW${g} Wrapped`, h('small', { text: me != null ? 'Your week in seven swipes, ready to share' : 'Pick your team to see your week in seven swipes' })), h('span', { class: 'play', text: '▶' }));
+    btn.onclick = () => { if (me == null) openSheet(); else openWrapped(me); };
+  }
+  function maybeWrapped() {
+    const g = lastFinished();
+    if (me != null && g && !D.meta.live && store.get('lmbyf-wrapped') !== String(g)) openWrapped(me);
+  }
+
+  // ---------- Match Centre ----------
+  const EV = { goal: ['G', 'scores', 1], own_goal: ['OG', 'own goal', 2], assist: ['A', 'assist', 3], pen_save: ['PS', 'saves a penalty', 4], pen_miss: ['PM', 'misses a penalty', 5], red: ['R', 'sent off', 6] };
+  function ownersOf(el) {
+    return D.managers.filter((m) => m.picks.some((k) => k.el === el)).map((m) => {
+      const k = m.picks.find((p) => p.el === el);
+      return { m, cap: m.captain === el, bench: k.slot > 11 && m.active_chip !== 'bboost' };
+    });
+  }
+  function ownersRow(el) {
+    const o = ownersOf(el);
+    const pl = player(el);
+    const row = h('div', { class: 'ev-own' });
+    if (!o.length) return null;
+    const caps = o.filter((x) => x.cap).length;
+    row.append(h('span', { text: `Owned by ${o.length}${caps ? `, captained by ${caps}` : ''} · ${pl.gw} pts:` }));
+    o.forEach((x) => row.append(h('span', { class: 'o' + (x.cap ? ' cap' : '') + (isMe(x.m.id) ? ' me' : ''), text: `${x.m.name}${x.cap ? ' (C)' : ''}${x.bench ? ' (bench)' : ''}` })));
+    return row;
+  }
+  function renderMatch() {
+    const gw = D.meta.gw, match = D.match || [];
+    const anyStarted = match.some((f) => f.started);
+    $('match-title').textContent = D.meta.live ? `GW${gw} live` : D.meta.gw_finished ? `GW${gw}: full time` : `GW${gw}`;
+    $('match-note').textContent = D.meta.live ? 'Scores, scorers and bonus as they happen, with who in the league each one affects. Updates about every 10 minutes.' : 'Every goal, assist, card and bonus from the last gameweek, and who in the league it hit.';
+    const seenKey = `lmbyf-seen-${gw}`;
+    let seen = null; try { seen = JSON.parse(store.get(seenKey) || 'null'); } catch (e) { seen = null; }
+    const seenSet = new Set(seen || []);
+    const allKeys = [];
+    let fresh = 0;
+    const box = $('fixtures'); box.replaceChildren();
+    if (!anyStarted) box.append(h('div', { class: 'card' }, h('p', { class: 'note', text: `GW${gw} hasn't kicked off yet. This fills up from the first whistle.` })));
+    match.filter((f) => f.started).forEach((f) => {
+      const st = f.done ? 'FT' : `${f.mins}'`;
+      const head = h('div', { class: 'fx-head' },
+        h('span', { class: 'fx-team', text: (CLUB[f.h] || [, f.h])[1] }),
+        h('span', { class: 'fx-score' }, `${f.hs ?? 0}-${f.as_ ?? 0}`, h('small', { class: f.done ? '' : 'live', text: st })),
+        h('span', { class: 'fx-team a', text: (CLUB[f.a] || [, f.a])[1] }));
+      if (CLUB[f.h]) head.style.setProperty('--ch', CLUB[f.h][0]);
+      if (CLUB[f.a]) head.style.setProperty('--ca', CLUB[f.a][0]);
+      const evs = h('div', { class: 'fx-events' });
+      const list = f.events.filter((e) => EV[e.t]).sort((a, b) => EV[a.t][2] - EV[b.t][2]);
+      const items = list.map((e) => ({ key: `${f.id}|${e.t}|${e.el}|${e.n}`, ico: EV[e.t][0], cls: e.t, text: `${player(e.el).n} ${EV[e.t][1]}${e.n > 1 ? ` ×${e.n}` : ''}`, el: e.el }));
+      f.bonus.forEach((b) => items.push({ key: `${f.id}|bonus|${b.el}|${b.b}`, ico: `+${b.b}`, cls: 'bonus', text: `${player(b.el).n} ${b.b} bonus${b.prov ? ' (provisional)' : ''}`, el: b.el }));
+      items.forEach((it) => {
+        allKeys.push(it.key);
+        const isNew = seen && !seenSet.has(it.key);
+        if (isNew) fresh += 1;
+        const own = ownersRow(it.el);
+        evs.append(h('div', { class: 'ev' + (isNew ? ' new' : '') + (own ? '' : ' quiet') },
+          h('span', { class: `ev-ico ${it.cls}`, text: it.ico }),
+          h('span', { class: 'ev-main' }, it.text, own ? null : h('span', { class: 'ev-none', text: ' · not owned here' }), isNew ? h('span', { class: 'newtag', text: 'NEW' }) : null),
+          own));
+      });
+      box.append(h('div', { class: 'fx' }, head, items.length ? evs : h('div', { class: 'fx-quiet', text: 'Nothing to report yet.' })));
+    });
+    $('match-new').hidden = !fresh;
+    $('match-new').textContent = `${fresh} new since you last looked`;
+    clearTimeout(renderMatch.t);
+    renderMatch.t = setTimeout(() => { if (!$('match').hidden) store.set(seenKey, JSON.stringify(allKeys)); }, 4000);
+    if (!seen) store.set(seenKey, JSON.stringify(allKeys));
+    // upcoming
+    const nxt = D.meta.live || !D.meta.gw_finished ? null : D.meta.next_gw;
+    const up = (D.fixtures || []).filter((f) => f.gw === (nxt || D.meta.gw) && !f.started).sort((a, b) => String(a.ko).localeCompare(String(b.ko)));
+    $('upcoming-head').hidden = !up.length;
+    $('upcoming-title').textContent = `Coming up: GW${nxt || D.meta.gw}`;
+    const ub = $('upcoming'); ub.replaceChildren();
+    const owned = new Set(D.managers.flatMap((m) => m.picks.map((k) => k.el)));
+    up.forEach((f) => {
+      const inv = [...owned].filter((e) => [f.h, f.a].includes(player(e).t)).length;
+      ub.append(h('div', { class: 'up-fx' }, h('b', { text: `${f.h} v ${f.a}` }),
+        h('span', { text: f.ko ? fmtTime(f.ko, { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : 'Time to be confirmed' }),
+        h('span', { text: inv ? `${inv} league player${inv > 1 ? 's' : ''} involved` : 'No league players involved' })));
+    });
+  }
+
+  // ---------- Manager cards ----------
+  const STATS = ['CAP', 'TRF', 'BEN', 'CON', 'CLU', 'CHP'];
+  function ratings() {
+    const fin = new Set(D.meta.finished_gws);
+    const n = D.managers.length;
+    const weekRank = (r) => 1 + D.history.filter((q) => q.gw === r.gw && q.points > r.points).length;
+    const raw = new Map(D.managers.map((m) => {
+      const hh = D.history.filter((r) => r.id === m.id && fin.has(r.gw));
+      const pts = hh.map((r) => r.points);
+      const mean = pts.reduce((a, b) => a + b, 0) / Math.max(1, pts.length);
+      const sd = Math.sqrt(pts.reduce((a, b) => a + (b - mean) ** 2, 0) / Math.max(1, pts.length));
+      const tr = D.transfers.filter((t) => t.id === m.id && fin.has(t.gw) && !['wildcard', 'freehit'].includes(t.chip));
+      const chipW = hh.filter((r) => r.chip), plain = hh.filter((r) => !r.chip);
+      const avg = (a) => a.reduce((x, r) => x + r.points, 0) / Math.max(1, a.length);
+      return [m.id, {
+        CAP: hh.reduce((a, r) => a + r.captain_pts, 0) / Math.max(1, hh.length),
+        TRF: tr.reduce((a, t) => a + t.pts_in - t.pts_out, 0) - hh.reduce((a, r) => a + r.hit, 0),
+        BEN: -hh.reduce((a, r) => a + r.bench, 0),
+        CON: -sd,
+        CLU: hh.filter((r) => weekRank(r) <= 3).length,
+        CHP: chipW.length ? avg(chipW) - avg(plain) : null,
+        form: D.meta.finished_gws.slice(-3).map((g) => { const r = hh.find((q) => q.gw === g); return r ? weekRank(r) : n; }),
+      }];
+    }));
+    const out = new Map(D.managers.map((m) => [m.id, {}]));
+    STATS.forEach((k) => {
+      const vals = [...raw.values()].map((r) => r[k]).filter((v) => v != null);
+      raw.forEach((r, id) => {
+        const v = r[k];
+        if (v == null) { out.get(id)[k] = 60; return; }
+        const below = vals.filter((x) => x < v).length, eq = vals.filter((x) => x === v).length;
+        out.get(id)[k] = Math.round(55 + 43 * (vals.length > 1 ? (below + (eq - 1) / 2) / (vals.length - 1) : .5));
+      });
+    });
+    D.managers.forEach((m) => {
+      const r = out.get(m.id);
+      const pos = 55 + 43 * (1 - (m.rank - 1) / Math.max(1, n - 1));
+      r.OVR = Math.round(STATS.reduce((a, k) => a + r[k], 0) / STATS.length * 0.55 + pos * 0.45);
+      const f = raw.get(m.id).form; const fa = f.reduce((a, b) => a + b, 0) / Math.max(1, f.length);
+      r.tier = fa <= 3 ? 'inform' : r.OVR >= 80 ? 'gold' : r.OVR >= 70 ? 'silver' : 'bronze';
+    });
+    return out;
+  }
+  const TIER = { inform: 'In form', gold: 'Gold', silver: 'Silver', bronze: 'Bronze' };
+  const TIER_BG = { inform: ['#3a1260', '#7a2cff', '#12d6ff'], gold: ['#fff4c4', '#ffcf4a', '#b87800'], silver: ['#ffffff', '#c9d0dc', '#8a93a6'], bronze: ['#f3c9a0', '#c98a52', '#8a5228'] };
+  function renderCards() {
+    const R = ratings();
+    const rail = $('cards-rail'); rail.replaceChildren();
+    D.managers.slice().sort((a, b) => R.get(b.id).OVR - R.get(a.id).OVR).forEach((m) => {
+      const r = R.get(m.id);
+      const share = h('button', { class: 'mc-share', type: 'button', text: 'Share' });
+      share.addEventListener('click', () => shareCard(m, r));
+      rail.append(h('article', { class: `mcard ${r.tier}${isMe(m.id) ? ' me' : ''}`, 'aria-label': `${m.name}, overall ${r.OVR}` },
+        h('div', { class: 'mc-top' }, h('span', { class: 'mc-ovr', text: r.OVR }), h('div', {}, h('span', { class: 'mc-pos', text: m.club || 'FPL' }), h('br'), h('span', { class: 'mc-tier', text: TIER[r.tier] }))),
+        crest(m, 'mc-crest'),
+        h('div', {}, h('div', { class: 'mc-name', text: m.name }), h('div', { class: 'mc-team', text: m.team })),
+        h('div', { class: 'mc-stats' }, STATS.map((k) => h('div', {}, h('b', { text: r[k] }), h('span', { text: k })))),
+        share));
+    });
+    if (me != null) {
+      const mine = [...rail.children].findIndex((c) => c.classList.contains('me'));
+      if (mine > 0) requestAnimationFrame(() => { rail.scrollLeft = rail.children[mine].offsetLeft - (rail.clientWidth - rail.children[mine].clientWidth) / 2; });
+    }
+  }
+  function shareCard(m, r) {
+    shareImage((g, W, H) => {
+      stadium(g, W, H, '#1b2370', '#070a1f');
+      const cw = 760, ch = 1080, x0 = (W - cw) / 2, y0 = 90;
+      const pts = [[.14, 0], [.86, 0], [1, .07], [1, .9], [.5, 1], [0, .9], [0, .07]].map(([a, b]) => [x0 + a * cw, y0 + b * ch]);
+      g.save(); g.shadowColor = 'rgba(0,0,0,.5)'; g.shadowBlur = 50; g.shadowOffsetY = 20;
+      const [c1, c2, c3] = TIER_BG[r.tier];
+      const lg = g.createLinearGradient(x0, y0, x0 + cw * .6, y0 + ch); lg.addColorStop(0, c1); lg.addColorStop(.45, c2); lg.addColorStop(1, c3);
+      g.fillStyle = lg; g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath(); g.fill(); g.restore();
+      const ink = r.tier === 'inform' ? '#ffffff' : '#1a1205';
+      fill(g, String(r.OVR), x0 + 70, y0 + 210, TEKO(220), ink, 'left');
+      fill(g, (m.club || 'FPL'), x0 + 78, y0 + 270, TEKO(70), ink, 'left');
+      fill(g, TIER[r.tier].toUpperCase(), x0 + 78, y0 + 315, ARCH(26, 800), ink, 'left');
+      const col = m.club && CLUB[m.club] ? CLUB[m.club][0] : '#3a4390';
+      const sx = x0 + cw - 290, sy = y0 + 70, sc = 5.6;
+      const shield = new Path2D('M20 1 38 7v15c0 12-8 19-18 23C10 41 2 34 2 22V7z');
+      g.save(); g.translate(sx, sy); g.scale(sc, sc); g.fillStyle = col; g.fill(shield); g.lineWidth = .8; g.strokeStyle = 'rgba(255,255,255,.7)'; g.stroke(shield); g.restore();
+      fill(g, m.name[0].toUpperCase(), sx + 20 * sc, sy + 33 * sc, TEKO(150), '#ffffff');
+      fill(g, m.name.toUpperCase(), W / 2, y0 + 560, TEKO(150), ink, 'center', cw - 120);
+      g.fillStyle = ink; g.fillRect(x0 + 90, y0 + 585, cw - 180, 5);
+      fill(g, m.team, W / 2, y0 + 640, ARCH(32, 700), ink, 'center', cw - 140);
+      STATS.forEach((k, i) => {
+        const cx = x0 + 150 + (i % 2) * 300, cy = y0 + 760 + Math.floor(i / 2) * 95;
+        fill(g, String(r[k]), cx, cy, TEKO(92), ink, 'left');
+        fill(g, k, cx + 110, cy, TEKO(64), ink, 'left');
+      });
+      footer(g, W, H);
+    }, `card-${m.name}.png`, `${m.name}: ${r.OVR} rated`);
+  }
+
   // ---------- me picker ----------
   function openSheet() {
     const list = $('sheet-list'); list.replaceChildren();
     D.managers.slice().sort((a, b) => a.name.localeCompare(b.name)).forEach((m) => list.append(
-      h('button', { type: 'button', onclick: () => { me = m.id; store.set(ME_KEY, String(m.id)); closeSheet(); renderAll(); } }, crest(m), h('b', { text: m.name }), h('span', { text: m.team }))));
+      h('button', { type: 'button', onclick: () => { me = m.id; store.set(ME_KEY, String(m.id)); closeSheet(); renderAll(); maybeWrapped(); } }, crest(m), h('b', { text: m.name }), h('span', { text: m.team }))));
     $('sheet').hidden = false;
   }
   function closeSheet() { $('sheet').hidden = true; store.set(ME_KEY + '-asked', '1'); }
@@ -558,7 +921,7 @@
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('sheet').hidden) closeSheet(); });
 
   // ---------- routing ----------
-  const VIEWS = ['table', 'awards', 'fans', 'rivals', 'squads'];
+  const VIEWS = ['table', 'match', 'awards', 'fans', 'rivals', 'squads'];
   function route() {
     const v = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'table';
     VIEWS.forEach((x) => { $(x).hidden = x !== v || !D; });
@@ -570,7 +933,7 @@
   function renderAll() {
     M = new Map(D.managers.map((m) => [m.id, m]));
     if (me != null && !M.has(me)) me = null;
-    renderHeader(); renderTable(); renderAwards(); renderFans(); renderRivals(); renderSquads(); route();
+    renderHeader(); renderTable(); renderWrappedCta(); renderMatch(); renderAwards(); renderFans(); renderCards(); renderRivals(); renderSquads(); route();
   }
 
   async function load(first) {
@@ -582,7 +945,7 @@
       D = data;
       $('loading').hidden = true; $('error').hidden = true;
       renderAll();
-      if (first && !store.get(ME_KEY + '-asked')) openSheet();
+      if (first) playIntro(() => { if (!store.get(ME_KEY + '-asked')) openSheet(); else maybeWrapped(); });
     } catch (e) {
       if (!D) { $('loading').hidden = true; $('error').hidden = false; }
     }
