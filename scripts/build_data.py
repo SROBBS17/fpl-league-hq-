@@ -370,6 +370,8 @@ def main():
     if os.environ.get("FORCE_DEPLOY") == "true":
         changed = True
     print(f"GW{gw} live={live_mode} managers={len(managers)} hash={digest} changed={changed}")
+    if os.environ.get("CHECK_ONLY"):
+        sys.exit(0 if changed else 3)
     if os.environ.get("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
             fh.write(f"changed={'true' if changed else 'false'}\n")
