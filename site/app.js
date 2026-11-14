@@ -402,9 +402,6 @@
         s('svg', { viewBox: '0 0 24 24', class: 'ico', 'aria-hidden': 'true' }, s('path', { d: ICON[k] || ICON.motw })),
         hero ? h('span', { class: 'big-pts' }, String(list[0].value), h('small', { text: 'pts' })) : null,
         h('span', { class: 'lab', text: list[0].label }), h('span', { class: 'who', text: who }), h('span', { class: 'what', text: hero ? `Gameweek ${g}. ${M.get(list[0].id)?.team || ''}` : what }));
-      const btn = h('button', { class: 'copy', type: 'button', text: 'Copy for the group' });
-      btn.addEventListener('click', () => copyText(btn, `GW${g} ${list[0].label}: ${who}. ${what}`));
-      card.append(btn);
       grid.append(card);
     });
     if (!grid.children.length) grid.append(h('p', { class: 'note', text: 'Awards appear once a gameweek has finished.' }));
