@@ -49,7 +49,7 @@
       <div class="podium" id="podium"></div>
       <div class="hero" id="hero"></div>
       <div class="section-head">
-        <h2 id="table-title">The table</h2>
+        <div class="head-row"><h2 id="table-title">The table</h2><button class="share-btn" id="share-table" type="button">Share</button></div>
         <p class="note" id="table-note"></p>
       </div>
       <ol class="standings" id="standings"></ol>
@@ -83,7 +83,7 @@
 
     <section class="view" id="awards" hidden>
       <div class="section-head">
-        <h2>Weekly awards</h2>
+        <div class="head-row"><h2>Weekly awards</h2><button class="share-btn" id="share-awards" type="button">Share</button></div>
         <div class="row">
           <select id="award-gw" aria-label="Gameweek"></select>
           <p class="note">Handed out automatically after every gameweek.</p>
@@ -141,6 +141,7 @@
         <select id="vs-b" aria-label="Second manager"></select>
       </div>
       <div class="vs-board" id="vs-board"></div>
+      <button class="share-btn wide" id="share-h2h" type="button">Share this head to head</button>
       <div class="card">
         <h3 class="card-title" id="vs-chart-title">Points gap, week by week</h3>
         <div class="legend" id="vs-legend"></div>
@@ -169,7 +170,7 @@
       </div>
       <div class="card scroll"><table class="tbl" id="moves"><thead><tr><th class="l">Manager</th><th class="l">Out</th><th class="l">In</th><th>Pts</th></tr></thead><tbody></tbody></table></div>
       <div class="section-head">
-        <h2>Fixture swing</h2>
+        <div class="head-row"><h2>Fixture swing</h2><button class="share-btn" id="share-fdr" type="button">Share</button></div>
         <p class="note">Official difficulty for the next six gameweeks. Capitals are home games.</p>
       </div>
       <div class="card scroll"><table class="tbl fdr" id="fdr"><thead></thead><tbody></tbody></table></div>

@@ -693,10 +693,10 @@
   }
 
   // ---------- shareable images ----------
-  async function shareImage(draw, filename, text) {
+  async function shareImage(draw, filename, text, height) {
     try { await Promise.all([document.fonts.load('700 100px Teko'), document.fonts.load('600 30px Archivo'), document.fonts.load('800 30px Archivo')]); } catch (e) { /* fall back to system fonts */ }
-    const c = document.createElement('canvas'); c.width = 1080; c.height = 1350;
-    draw(c.getContext('2d'), 1080, 1350);
+    const c = document.createElement('canvas'); c.width = 1080; c.height = height || 1350;
+    draw(c.getContext('2d'), 1080, c.height);
     const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
     if (!blob) return;
     const file = new File([blob], filename, { type: 'image/png' });
@@ -939,7 +939,9 @@
           h('span', { class: 'ev-main' }, it.text, own ? null : h('span', { class: 'ev-none', text: ' · not owned here' }), isNew ? h('span', { class: 'newtag', text: 'NEW' }) : null),
           own));
       });
-      box.append(h('div', { class: 'fx' }, head, items.length ? evs : h('div', { class: 'fx-quiet', text: 'Nothing to report yet.' })));
+      const sb = h('button', { class: 'share-btn small', type: 'button', text: 'Share' });
+      sb.addEventListener('click', busy(sb, () => shareFixture(f, items)));
+      box.append(h('div', { class: 'fx' }, head, items.length ? evs : h('div', { class: 'fx-quiet', text: 'Nothing to report yet.' }), h('div', { class: 'fx-foot' }, sb)));
     });
     $('match-new').hidden = !fresh;
     $('match-new').textContent = `${fresh} new since you last looked`;
@@ -1052,6 +1054,146 @@
       footer(g, W, H);
     }, `card-${m.name}.png`, `${m.name}: ${r.OVR} rated`);
   }
+
+  // ---------- share buttons ----------
+  async function crestImages(ms) { const out = new Map(); await Promise.all(ms.map(async (m) => out.set(m.id, await crestImage(m)))); return out; }
+  function title(g, W, kicker, big) { fill(g, kicker, W / 2, 112, TEKO(54), '#ffbf1f'); fill(g, big, W / 2, 222, TEKO(128), '#ffffff', 'center', W - 110); }
+  function busy(btn, fn) { return async () => { if (btn.disabled) return; btn.disabled = true; try { await fn(); } finally { btn.disabled = false; } }; }
+  async function shareTable() {
+    const rows = D.managers.slice().sort((a, b) => a.rank - b.rank);
+    const imgs = await crestImages(rows);
+    shareImage((g, W, H) => {
+      stadium(g, W, H, '#1b2370', '#070a1f');
+      title(g, W, D.meta.live ? `GAMEWEEK ${D.meta.gw} · LIVE` : `AFTER GAMEWEEK ${D.meta.gw}`, 'THE TABLE');
+      const top = 280, rh = 84;
+      rows.forEach((m, i) => {
+        const y = top + i * rh, mv = (m.last_rank ?? m.rank) - m.rank;
+        g.fillStyle = i % 2 ? 'rgba(255,255,255,.04)' : 'rgba(255,255,255,.08)'; g.fillRect(60, y, W - 120, rh - 8);
+        if (i < 3) { g.fillStyle = '#ffbf1f'; g.fillRect(60, y, 10, rh - 8); }
+        fill(g, String(m.rank), 120, y + 60, TEKO(64), i < 3 ? '#ffbf1f' : '#ffffff');
+        fill(g, mv > 0 ? `▲${mv}` : mv < 0 ? `▼${-mv}` : '', 182, y + 52, ARCH(22, 800), mv > 0 ? '#22e6a8' : '#ff3d6e');
+        const im = imgs.get(m.id); if (im) g.drawImage(im, 220, y + 6, 56, 64);
+        fill(g, m.name.toUpperCase(), 300, y + 46, TEKO(48), '#ffffff', 'left', 420);
+        fill(g, m.team, 300, y + 68, ARCH(20), 'rgba(255,255,255,.65)', 'left', 420);
+        fill(g, `${D.meta.live ? 'LIVE' : 'GW'} ${m.gw_points}`, W - 250, y + 56, TEKO(40), 'rgba(255,255,255,.7)', 'right');
+        fill(g, String(m.total), W - 90, y + 60, TEKO(64), '#ffffff', 'right');
+      });
+      footer(g, W, H);
+    }, `table-gw${D.meta.gw}.png`, `The table after GW${D.meta.gw}`);
+  }
+  async function shareH2H() {
+    const A = M.get(+$('vs-a').value), B = M.get(+$('vs-b').value); if (!A || !B) return;
+    const imgs = await crestImages([A, B]);
+    const ha = D.history.filter((r) => r.id === A.id), hb = D.history.filter((r) => r.id === B.id);
+    let wa = 0, wb = 0; ha.forEach((r) => { const o = hb.find((q) => q.gw === r.gw); if (o) { if (r.points > o.points) wa++; else if (r.points < o.points) wb++; } });
+    const best = (hh) => Math.max(...hh.map((r) => r.points)), cap = (hh) => hh.reduce((x, r) => x + r.captain_pts, 0);
+    const rows = [['Gameweeks won', wa, wb, true], ['Total points', A.total, B.total, true], ['Best week', best(ha), best(hb), true], ['Captain points', cap(ha), cap(hb), true], ['Points on bench', A.bench_total, B.bench_total, false], ['Hits taken', A.hits, B.hits, false]];
+    shareImage((g, W, H) => {
+      stadium(g, W, H, '#1b2370', '#070a1f');
+      const ca = A.club && CLUB[A.club] ? CLUB[A.club][0] : '#2a3480', cb = B.club && CLUB[B.club] ? CLUB[B.club][0] : '#2a3480';
+      let gr = g.createLinearGradient(0, 0, W / 2, 0); gr.addColorStop(0, ca); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.globalAlpha = .45; g.fillStyle = gr; g.fillRect(0, 0, W / 2, 620);
+      gr = g.createLinearGradient(W, 0, W / 2, 0); gr.addColorStop(0, cb); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(W / 2, 0, W / 2, 620); g.globalAlpha = 1;
+      fill(g, 'HEAD TO HEAD', W / 2, 100, TEKO(56), '#ffffff');
+      const ia = imgs.get(A.id), ib = imgs.get(B.id);
+      if (ia) g.drawImage(ia, 120, 150, 220, 253); if (ib) g.drawImage(ib, W - 340, 150, 220, 253);
+      fill(g, 'V', W / 2, 330, TEKO(150), '#ffbf1f');
+      fill(g, A.name.toUpperCase(), 230, 480, TEKO(80), '#ffbf1f', 'center', 400); fill(g, B.name.toUpperCase(), W - 230, 480, TEKO(80), '#33d6ff', 'center', 400);
+      fill(g, A.team, 230, 520, ARCH(24), 'rgba(255,255,255,.75)', 'center', 400); fill(g, B.team, W - 230, 520, ARCH(24), 'rgba(255,255,255,.75)', 'center', 400);
+      fill(g, `${Math.abs(A.total - B.total)} POINTS APART`, W / 2, 600, TEKO(52), '#ffffff');
+      rows.forEach(([k, va, vb, hi], i) => {
+        const y = 690 + i * 86;
+        g.fillStyle = 'rgba(255,255,255,.07)'; g.fillRect(90, y - 58, W - 180, 74);
+        const aw = hi ? va > vb : va < vb, bw = hi ? vb > va : vb < va;
+        fill(g, String(va), 140, y, TEKO(64), aw ? '#ffbf1f' : '#ffffff', 'left');
+        fill(g, k.toUpperCase(), W / 2, y - 6, TEKO(40), 'rgba(255,255,255,.7)');
+        fill(g, String(vb), W - 140, y, TEKO(64), bw ? '#33d6ff' : '#ffffff', 'right');
+      });
+      footer(g, W, H);
+    }, `${A.name}-v-${B.name}.png`, `${A.name} v ${B.name}`);
+  }
+  async function shareAwards() {
+    const gw = +$('award-gw').value;
+    const list = D.awards.filter((a) => a.gw === gw);
+    const order = ['motw', 'spoon', 'cap_hero', 'cap_fail', 'bench', 'transfer_best', 'transfer_worst', 'hit_backfired'];
+    const groups = order.map((k) => list.filter((a) => a.award === k)).filter((x) => x.length);
+    const imgs = await crestImages([...new Set(list.map((a) => a.id))].map((id) => M.get(id)).filter(Boolean));
+    shareImage((g, W, H) => {
+      stadium(g, W, H, '#1b2370', '#070a1f');
+      title(g, W, `GAMEWEEK ${gw}`, 'THE AWARDS');
+      const rh = Math.min(118, 940 / Math.max(1, groups.length));
+      groups.forEach((grp, i) => {
+        const y = 280 + i * rh, good = GOOD.has(grp[0].award);
+        g.fillStyle = good ? 'rgba(255,191,31,.14)' : 'rgba(255,61,110,.12)'; g.fillRect(60, y, W - 120, rh - 12);
+        g.fillStyle = good ? '#ffbf1f' : '#ff3d6e'; g.fillRect(60, y, 10, rh - 12);
+        const names = grp.map((a) => M.get(a.id)?.name).filter(Boolean);
+        const shown = grp.slice(0, 4);
+        shown.forEach((a, j) => { const im = imgs.get(a.id); if (im) g.drawImage(im, 92 + j * 46, y + (rh - 12) / 2 - 34, 59, 68); });
+        const tx = 92 + Math.min(4, shown.length) * 46 + 44;
+        fill(g, grp[0].label.toUpperCase(), tx, y + rh * .38, TEKO(40), good ? '#ffbf1f' : '#ff3d6e', 'left', W - tx - 80);
+        fill(g, names.length > 3 ? `${names.length} MANAGERS` : names.join(' & ').toUpperCase(), tx, y + rh * .7, TEKO(50), '#ffffff', 'left', W - tx - 260);
+        fill(g, names.length > 3 ? grp[0].text : grp[0].text, W - 90, y + rh * .7, ARCH(22, 600), 'rgba(255,255,255,.7)', 'right', 300);
+      });
+      footer(g, W, H);
+    }, `awards-gw${gw}.png`, `GW${gw} awards`);
+  }
+  async function shareFixture(f, items) {
+    const ownerIds = new Set(); items.forEach((it) => ownersOf(it.el).forEach((o) => ownerIds.add(o.m.id)));
+    const imgs = await crestImages([...ownerIds].map((id) => M.get(id)));
+    shareImage((g, W, H) => {
+      stadium(g, W, H, '#1b2370', '#070a1f');
+      const ch = CLUB[f.h] ? CLUB[f.h][0] : '#333', ca = CLUB[f.a] ? CLUB[f.a][0] : '#333';
+      g.fillStyle = ch; g.globalAlpha = .55; g.fillRect(0, 60, W / 2, 230); g.fillStyle = ca; g.fillRect(W / 2, 60, W / 2, 230); g.globalAlpha = 1;
+      fill(g, (CLUB[f.h] || [, f.h])[1].toUpperCase(), 225, 200, TEKO(80), '#ffffff', 'center', 300);
+      fill(g, (CLUB[f.a] || [, f.a])[1].toUpperCase(), W - 225, 200, TEKO(80), '#ffffff', 'center', 300);
+      g.fillStyle = 'rgba(3,4,13,.75)'; g.fillRect(W / 2 - 120, 90, 240, 170);
+      fill(g, `${f.hs ?? 0}-${f.as_ ?? 0}`, W / 2, 210, TEKO(130), '#ffffff');
+      fill(g, f.done ? 'FULL TIME' : `${f.mins}'`, W / 2, 248, ARCH(24, 800), f.done ? '#9aa3d6' : '#ff2448');
+      const owned = items.filter((it) => ownersOf(it.el).length).slice(0, 7);
+      const rows = owned.length ? owned : items.slice(0, 7);
+      rows.forEach((it, i) => {
+        const y = 340 + i * 118, o = ownersOf(it.el);
+        g.fillStyle = 'rgba(255,255,255,.07)'; g.fillRect(60, y, W - 120, 104);
+        fill(g, it.ico, 110, y + 66, TEKO(52), it.cls === 'bonus' ? '#ffbf1f' : ['red', 'pen_miss', 'own_goal'].includes(it.cls) ? '#ff3d6e' : '#22e6a8');
+        fill(g, it.text.toUpperCase(), 170, y + 50, TEKO(46), '#ffffff', 'left', W - 260);
+        if (o.length) {
+          const caps = o.filter((x) => x.cap).length;
+          const who = o.map((x) => x.m.name + (x.cap ? ' (C)' : '')).join(', ');
+          fill(g, `Owned by ${o.length}${caps ? `, captained by ${caps}` : ''}: ${who}`, 170, y + 86, ARCH(22, 600), 'rgba(255,255,255,.75)', 'left', W - 260 - Math.min(5, o.length) * 46);
+          o.slice(0, 5).forEach((x, j) => { const im = imgs.get(x.m.id); if (im) g.drawImage(im, W - 80 - (Math.min(5, o.length) - j) * 46, y + 18, 42, 48); });
+        } else fill(g, 'Nobody in the league owns him', 170, y + 86, ARCH(22, 600), 'rgba(255,255,255,.5)', 'left');
+      });
+      footer(g, W, H);
+    }, `${f.h}-${f.a}.png`, `${f.h} ${f.hs}-${f.as_} ${f.a}`, Math.max(760, 340 + Math.min(7, items.filter((it) => ownersOf(it.el).length).length || Math.min(7, items.length)) * 118 + 170));
+  }
+  async function shareFdr() {
+    const next = D.fixtures.filter((f) => f.gw >= (D.meta.next_gw || D.meta.gw));
+    const gws = [...new Set(next.map((f) => f.gw))].sort((a, b) => a - b).slice(0, 6);
+    const clubs = Object.keys(CLUB).filter((c) => D.pltable.some((t) => t.team === c));
+    const rows = clubs.map((c) => { const cells = gws.map((x) => next.filter((f) => f.gw === x && (f.h === c || f.a === c)).map((f) => (f.h === c ? { o: f.a, home: true, d: f.hd } : { o: f.h, home: false, d: f.ad }))); return { c, cells, score: cells.flat().reduce((a, f) => a + f.d, 0) / Math.max(1, cells.flat().length) }; }).sort((a, b) => a.score - b.score);
+    const FDR = { 2: '#1f8f63', 3: '#3b4475', 4: '#a3304e', 5: '#d1214f' };
+    shareImage((g, W, H) => {
+      stadium(g, W, H, '#1b2370', '#070a1f');
+      title(g, W, `GAMEWEEKS ${gws[0]}–${gws[gws.length - 1]}`, 'FIXTURE SWING');
+      fill(g, 'Easiest run at the top. Capitals are home games.', W / 2, 268, ARCH(24, 600), 'rgba(255,255,255,.7)');
+      const top = 340, rh = 43, x0 = 70, cw = (W - 140 - 120) / gws.length;
+      gws.forEach((x, i) => fill(g, `GW${x}`, x0 + 120 + cw * (i + .5), top - 14, TEKO(34), 'rgba(255,255,255,.7)'));
+      rows.forEach((r, i) => {
+        const y = top + i * rh;
+        g.fillStyle = CLUB[r.c][0]; g.fillRect(x0, y + 4, 106, rh - 8);
+        fill(g, r.c, x0 + 53, y + 32, TEKO(34), '#ffffff');
+        r.cells.forEach((fx, j) => {
+          const d = fx.length ? Math.round(fx.reduce((a, f) => a + f.d, 0) / fx.length) : 3;
+          g.fillStyle = fx.length ? FDR[d] || FDR[3] : 'rgba(255,255,255,.08)'; g.fillRect(x0 + 120 + cw * j + 3, y + 4, cw - 6, rh - 8);
+          fill(g, fx.length ? fx.map((f) => (f.home ? f.o : f.o.toLowerCase())).join('+') : 'BLANK', x0 + 120 + cw * (j + .5), y + 31, TEKO(30), '#ffffff', 'center', cw - 10);
+        });
+      });
+      footer(g, W, H);
+    }, `fixture-swing.png`, 'Fixture swing');
+  }
+  $('share-table').addEventListener('click', busy($('share-table'), shareTable));
+  $('share-h2h').addEventListener('click', busy($('share-h2h'), shareH2H));
+  $('share-awards').addEventListener('click', busy($('share-awards'), shareAwards));
+  $('share-fdr').addEventListener('click', busy($('share-fdr'), shareFdr));
 
   // ---------- me picker ----------
   function openSheet() {
