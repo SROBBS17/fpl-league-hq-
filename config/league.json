@@ -15,5 +15,67 @@
     "1757336": "ARS",
     "2443006": "CHE",
     "2521543": "TOT"
+  },
+  "avatars": {
+    "8907310": {
+      "skin": "#f2c4a8",
+      "hair": "#3b2a1e",
+      "style": "swept",
+      "facial": "moustache",
+      "facialColor": "#6b4428",
+      "mouth": "grin"
+    },
+    "2711023": {
+      "skin": "#efbe9f",
+      "hair": "#8a5232",
+      "style": "crop",
+      "facial": "beard",
+      "facialColor": "#3a2318",
+      "mouth": "grin"
+    },
+    "1645672": {
+      "skin": "#d9a17c",
+      "hair": "#2a1c14",
+      "style": "cap",
+      "cap": "#15161c",
+      "facial": "beard",
+      "facialColor": "#3a2a1e",
+      "mouth": "grin",
+      "short": true
+    },
+    "1585142": {
+      "skin": "#e3ad8a",
+      "hair": "#141010",
+      "style": "slick",
+      "facial": "stubble",
+      "facialColor": "#2b2018",
+      "mouth": "grin"
+    },
+    "4717777": {
+      "skin": "#f2c1a3",
+      "hair": "#5a3d27",
+      "style": "crop",
+      "facial": "stubble",
+      "facialColor": "#7a5a40",
+      "mouth": "smile",
+      "round": true
+    },
+    "2443006": {
+      "skin": "#e9b896",
+      "hair": "#6b4a30",
+      "style": "quiff",
+      "facial": "stubble",
+      "facialColor": "#7a5a40",
+      "mouth": "closed"
+    },
+    "1757336": {
+      "skin": "#f0b9a0",
+      "hair": "#2a201a",
+      "style": "curly",
+      "facial": "beard",
+      "facialColor": "#5a3a24",
+      "mouth": "smile",
+      "round": true
+    }
   }
 }

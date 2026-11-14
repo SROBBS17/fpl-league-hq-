@@ -213,6 +213,7 @@ def main():
         total = (totals_at[i].get(gw - 1, 0) + gw_pts) if i in live_points else row["total"]
         managers.append(dict(
             id=i, name=first_name(row["player_name"]), team=row["entry_name"], club=clubs.get(i),
+            avatar=CFG.get("avatars", {}).get(str(i)),
             rank=league_rank_at.get((i, gw), row["rank"]), last_rank=league_rank_at.get((i, gw - 1)),
             total=total, gw_points=gw_pts, overall_rank=last.get("overall_rank"),
             bank=last["bank"] / 10, value=last["value"] / 10, free_transfers=ft,

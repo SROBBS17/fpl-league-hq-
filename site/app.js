@@ -44,14 +44,75 @@
   const chipsLeft = (m) => Object.keys(CHIP_NAMES).filter((c) => !m.chips[`${c}_${half()}`]);
 
   const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  // Club-coloured shield with the manager's initial.
+  // Club-coloured shield: a cartoon of the manager where we have one, else their initial.
+  const SHIELD = 'M20 1 38 7v15c0 12-8 19-18 23C10 41 2 34 2 22V7z';
+  let clipSeq = 0;
+  function shade(hex, k) {
+    const n = parseInt(hex.slice(1), 16), f = (v) => Math.max(0, Math.min(255, Math.round(v * k)));
+    return '#' + [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => f(v).toString(16).padStart(2, '0')).join('');
+  }
+  function avatarParts(a, col) {
+    const P = (d, fillc, extra) => s('path', Object.assign({ d, fill: fillc }, extra || {}));
+    const E = (cx, cy, rx, ry, fillc) => s('ellipse', { cx, cy, rx, ry, fill: fillc });
+    const sk = a.skin, sk2 = shade(a.skin, .86), hair = a.hair, fc = a.facialColor || hair;
+    const rx = a.round ? 10.2 : 9.5;
+    const out = [];
+    out.push(P('M3 46C4 38.5 10.5 35.4 20 35.4S36 38.5 37 46Z', col));
+    out.push(P('M15.6 35.6 20 40.5 24.4 35.6Z', '#ffffff', { opacity: '.9' }));
+    out.push(P('M16.6 28h6.8v7.6c-1 1.4-5.8 1.4-6.8 0Z', sk2));
+    if (a.style === 'cap') out.push(P(`M${20 - rx - .6} 21c-1.4 4-1.2 7 .4 9.5 1-3 1.2-6 1-9.5Z`, hair), P(`M${20 + rx + .6} 21c1.4 4 1.2 7-.4 9.5-1-3-1.2-6-1-9.5Z`, hair));
+    out.push(E(20 - rx - .2, 22, 1.7, 2.5, sk2), E(20 + rx + .2, 22, 1.7, 2.5, sk2));
+    out.push(E(20, 20.6, rx, 11.6, sk));
+    if (a.facial === 'beard') out.push(P(`M${20 - rx + .1} 20.5C${20 - rx} 30 14 33.8 20 33.8S${20 + rx} 30 ${20 + rx - .1} 20.5C28.6 25.4 26 27.4 20 27.6 14 27.4 11.4 25.4 ${20 - rx + .1} 20.5Z`, fc));
+    if (a.facial === 'stubble') out.push(P(`M${20 - rx + .3} 22C${20 - rx + .4} 30 14.5 32.6 20 32.6S${20 + rx - .4} 30 ${20 + rx - .3} 22C28.4 26 26 27.6 20 27.8 14 27.6 11.6 26 ${20 - rx + .3} 22Z`, fc, { opacity: '.32' }));
+    if (a.facial === 'beard' || a.facial === 'stubble' || a.facial === 'moustache') out.push(P('M15.4 25.3c1.6-1.7 3.6-1.3 4.6-.4 1-.9 3-1.3 4.6.4-1.6.5-3.2.5-4.6.2-1.4.3-3 .3-4.6-.2Z', fc, a.facial === 'stubble' ? { opacity: '.45' } : null));
+    if (a.mouth === 'grin') out.push(P('M16.4 26.4Q20 31 23.6 26.4Z', '#3a1416'), P('M16.9 26.6Q20 27.6 23.1 26.6L22.8 27.6Q20 28.2 17.2 27.6Z', '#ffffff'));
+    else if (a.mouth === 'smile') out.push(P('M16.8 26.6Q20 29.6 23.2 26.6Q20 28 16.8 26.6Z', '#3a1416'), P('M17.6 26.9Q20 27.6 22.4 26.9L22.1 27.4Q20 27.9 17.9 27.4Z', '#ffffff'));
+    else out.push(P('M17.4 27.2Q20 27.9 22.6 27.2', 'none', { stroke: shade(a.skin, .55), 'stroke-width': '.8', 'stroke-linecap': 'round' }));
+    out.push(P('M20.2 20.2Q19 23.6 20.9 23.7', 'none', { stroke: shade(a.skin, .7), 'stroke-width': '.7', 'stroke-linecap': 'round' }));
+    const eye = (x) => [E(x, 20, .95, a.mouth === 'closed' ? .75 : .95, '#20160f'), E(x + .3, 19.7, .28, .28, '#ffffff')];
+    out.push(...eye(16.2), ...eye(23.8));
+    out.push(P('M14.2 17.6q2-1.3 4.1-.2', 'none', { stroke: shade(hair, 1), 'stroke-width': '1.05', 'stroke-linecap': 'round' }), P('M21.7 17.4q2.1-1.1 4.1.2', 'none', { stroke: shade(hair, 1), 'stroke-width': '1.05', 'stroke-linecap': 'round' }));
+    const H = (d) => out.push(P(d, hair));
+    if (a.style === 'swept') { H('M10.3 19C9.4 10.6 13.6 6.6 20.2 6.6c6.4 0 10.8 3.6 9.6 12-1-3.6-2.6-5.4-5-6.2-4 1.6-9.4 1-12.4.6-1.1 1.8-1.7 3.8-2.1 6Z'); H('M22 7.2c2.6-1.6 5.6-1.2 7 .4-2.2-.2-4.2.2-5.6 1.4Z'); }
+    if (a.style === 'crop') H(`M${20 - rx + .1} 18C${20 - rx - .3} 11 14 7.8 20 7.8S${20 + rx + .3} 11 ${20 + rx - .1} 18C28.6 14.4 26 12.6 20 12.6S11.4 14.4 ${20 - rx + .1} 18Z`);
+    if (a.style === 'slick') { H('M10.7 17.6C10 9.4 14 6 20.5 6S30.4 9.8 29.4 17.6c-.8-4.4-2.6-6-5.9-6.4-4.5-.4-9.5 0-11.5 2.3-.6 1.1-1 2.5-1.3 4.1Z'); out.push(P('M10.8 18.5c.2-2.4.8-4 1.6-5l-.2 6Z', hair, { opacity: '.45' }), P('M29.2 18.5c-.2-2.4-.8-4-1.6-5l.2 6Z', hair, { opacity: '.45' })); }
+    if (a.style === 'quiff') H('M10.4 19C9.8 11 13 6.4 18 5.9c3-1.2 7-.5 9.5 1.6 2.5 2 2.9 5.5 2.1 11-1-4.5-2.8-6.1-7.6-6.2-5 0-9.2.8-11.6 6.7Z');
+    if (a.style === 'curly') {
+      out.push(P('M10.6 19.5C10 13 13 9.6 20 9.4S30 13 29.4 19.5C28.4 15.6 26.4 13.6 20 13.4S11.6 15.6 10.6 19.5Z', hair, { opacity: '.55' }));
+      out.push(P('M11.6 15.5C11.4 9.5 15 6.4 20 6.4s8.8 3 8.6 9.1C26.6 12.8 24 12 20 12s-6.6.8-8.4 3.5Z', hair));
+      [[12.4, 12.6, 2.1], [14.4, 9.6, 2.4], [17.4, 7.6, 2.5], [20.8, 7, 2.5], [24, 7.8, 2.4], [26.6, 9.8, 2.3], [27.8, 12.8, 2], [16, 12.2, 2], [19.4, 11.6, 2], [22.8, 11.8, 2], [25.4, 12.8, 1.8]].forEach(([x, y, r]) => out.push(s('circle', { cx: x, cy: y, r, fill: hair }), s('circle', { cx: x - r * .3, cy: y - r * .35, r: r * .35, fill: shade(hair, 1.6), opacity: '.5' })));
+    }
+    if (a.style === 'cap') {
+      if (!a.short) H('M10.4 19c-.6-2-.5-4 .2-5.6l1 5.6Z');
+      out.push(P('M9.6 16.4C9.6 8.2 14 5.4 20 5.4s10.4 2.8 10.4 11Z', a.cap), P('M8.2 16.2c6-1.6 18-1.6 25 .8-7 1.4-19 1.2-25-.8Z', shade(a.cap, .7)), s('circle', { cx: 20, cy: 5.8, r: .9, fill: shade(a.cap, 1.6) }));
+    }
+    return out;
+  }
   function crest(m, cls) {
     const col = m && m.club && CLUB[m.club] ? CLUB[m.club][0] : '#3a4390';
-    const svg = s('svg', { viewBox: '0 0 40 46', class: `crest ${cls || ''}`, 'aria-hidden': 'true' },
-      s('path', { d: 'M20 1 38 7v15c0 12-8 19-18 23C10 41 2 34 2 22V7z', fill: col, stroke: 'rgba(255,255,255,.55)', 'stroke-width': '1.5' }),
+    const a = m && m.avatar;
+    const svg = s('svg', { viewBox: '0 0 40 46', class: `crest ${cls || ''}`, 'aria-hidden': 'true' });
+    if (a) {
+      const id = `av${++clipSeq}`;
+      svg.append(s('defs', {}, s('clipPath', { id }, s('path', { d: SHIELD }))),
+        s('path', { d: SHIELD, fill: shade(col, .55) }),
+        s('g', { 'clip-path': `url(#${id})` }, s('path', { d: 'M2 30 38 12v6L5 35z', fill: 'rgba(255,255,255,.08)' }), ...avatarParts(a, col)),
+        s('path', { d: SHIELD, fill: 'none', stroke: 'rgba(255,255,255,.7)', 'stroke-width': '1.4' }));
+      return svg;
+    }
+    svg.append(s('path', { d: SHIELD, fill: col, stroke: 'rgba(255,255,255,.55)', 'stroke-width': '1.5' }),
       s('path', { d: 'M2 30 38 12v6L5 35z', fill: 'rgba(255,255,255,.18)' }),
       s('text', { x: 20, y: 31, 'text-anchor': 'middle', 'font-size': 24, text: (m && m.name ? m.name[0] : '?').toUpperCase() }));
     return svg;
+  }
+  function crestImage(m) {
+    return new Promise((resolve) => {
+      const el = crest(m, ''); el.setAttribute('xmlns', svgNS); el.setAttribute('width', '400'); el.setAttribute('height', '460');
+      el.querySelectorAll('text').forEach((t) => { t.setAttribute('fill', '#ffffff'); t.setAttribute('font-family', 'Impact, Arial Narrow, sans-serif'); t.setAttribute('font-weight', '700'); });
+      const img = new Image(); img.onload = () => resolve(img); img.onerror = () => resolve(null);
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(el));
+    });
   }
   // Numbers count up the first time they are drawn.
   const counted = new Set();
@@ -959,7 +1020,8 @@
       if (mine > 0) requestAnimationFrame(() => { rail.scrollLeft = rail.children[mine].offsetLeft - (rail.clientWidth - rail.children[mine].clientWidth) / 2; });
     }
   }
-  function shareCard(m, r) {
+  async function shareCard(m, r) {
+    const crestImg = await crestImage(m);
     shareImage((g, W, H) => {
       stadium(g, W, H, '#1b2370', '#070a1f');
       const cw = 760, ch = 1080, x0 = (W - cw) / 2, y0 = 90;
@@ -972,11 +1034,8 @@
       fill(g, String(r.OVR), x0 + 70, y0 + 210, TEKO(220), ink, 'left');
       fill(g, (m.club || 'FPL'), x0 + 78, y0 + 270, TEKO(70), ink, 'left');
       fill(g, TIER[r.tier].toUpperCase(), x0 + 78, y0 + 315, ARCH(26, 800), ink, 'left');
-      const col = m.club && CLUB[m.club] ? CLUB[m.club][0] : '#3a4390';
       const sx = x0 + cw - 290, sy = y0 + 70, sc = 5.6;
-      const shield = new Path2D('M20 1 38 7v15c0 12-8 19-18 23C10 41 2 34 2 22V7z');
-      g.save(); g.translate(sx, sy); g.scale(sc, sc); g.fillStyle = col; g.fill(shield); g.lineWidth = .8; g.strokeStyle = 'rgba(255,255,255,.7)'; g.stroke(shield); g.restore();
-      fill(g, m.name[0].toUpperCase(), sx + 20 * sc, sy + 33 * sc, TEKO(150), '#ffffff');
+      if (crestImg) g.drawImage(crestImg, sx, sy, 40 * sc, 46 * sc);
       fill(g, m.name.toUpperCase(), W / 2, y0 + 560, TEKO(150), ink, 'center', cw - 120);
       g.fillStyle = ink; g.fillRect(x0 + 90, y0 + 585, cw - 180, 5);
       fill(g, m.team, W / 2, y0 + 640, ARCH(32, 700), ink, 'center', cw - 140);
