@@ -95,7 +95,8 @@
     return out;
   }
   function crest(m, cls) {
-    const col = m && m.club && CLUB[m.club] ? CLUB[m.club][0] : '#3a4390';
+    const PAL = ['#3a4390', '#0e7c6b', '#8a3ab9', '#b4541a', '#1f6fb2', '#a8324e', '#4f6b1d', '#6b4a8a'];
+    const col = m && m.club && CLUB[m.club] ? CLUB[m.club][0] : PAL[(m ? m.id : 0) % PAL.length];
     const a = m && m.avatar;
     const svg = s('svg', { viewBox: '0 0 40 46', class: `crest ${cls || ''}`, 'aria-hidden': 'true' });
     if (a) {
@@ -151,7 +152,7 @@
     const best = aw('transfer_best'); if (best.length) push('TRANSFER', `${nm(best[0].id)}: ${best[0].text}`);
     const mover = rows.filter((m) => m.last_rank && m.last_rank > m.rank).sort((a, b) => (b.last_rank - b.rank) - (a.last_rank - a.rank))[0];
     if (mover) push('CLIMBER', `${mover.name} up ${mover.last_rank - mover.rank} to ${ord(mover.rank)}`);
-    ['CHE', 'ARS', 'LIV', 'TOT', 'MUN'].forEach((c) => {
+    (D.meta.banter_clubs || []).forEach((c) => {
       const r = D.last_result[c]; const t = D.pltable.find((x) => x.team === c); if (!r || !t) return;
       push(CLUB[c][1].toUpperCase(), `${r.res === 'W' ? 'beat' : r.res === 'L' ? 'lost to' : 'drew with'} ${(D.pltable.find((x) => x.team === r.opp) || { name: r.opp }).name} ${r.gf}-${r.ga}, now ${ord(t.pos)}`);
     });
@@ -478,6 +479,8 @@
     const box = $('fanbase'); box.replaceChildren();
     const groups = new Map();
     D.managers.forEach((m) => { if (m.club) { if (!groups.has(m.club)) groups.set(m.club, []); groups.get(m.club).push(m); } });
+    box.hidden = groups.size < 2;
+    if (box.previousElementSibling) box.previousElementSibling.hidden = groups.size < 2;
     if (groups.size < 2) {
       box.append(h('div', { class: 'card' }, h('p', { class: 'note', text: `The fanbase league appears once ${D.meta.contact || 'the organiser'} has added which club everyone supports.` })));
     } else {
@@ -497,7 +500,7 @@
     }
     // results
     const res = $('results'); res.replaceChildren();
-    const clubs = [...new Set(['ARS', 'LIV', 'CHE', 'TOT', 'MUN', ...D.managers.map((m) => m.club).filter(Boolean)])];
+    const clubs = [...new Set([...(D.meta.banter_clubs || []), ...D.managers.map((m) => m.club).filter(Boolean)])];
     const nm = (code) => (D.pltable.find((t) => t.team === code) || { name: code }).name;
     clubs.forEach((c) => {
       const r = D.last_result[c];

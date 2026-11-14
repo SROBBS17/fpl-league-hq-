@@ -150,6 +150,15 @@ def main():
     ids = [r["entry"] for r in entries]
     hist = {i: get(f"entry/{i}/history/") for i in ids}
     trans = {i: get(f"entry/{i}/transfers/") for i in ids}
+    # Leagues can start after GW1: their points only count from the starting gameweek.
+    start = L["league"].get("start_event") or 1
+    hist_full = {i: list(hist[i]["current"]) for i in ids}
+    for i in ids:
+        rows_ = hist[i]["current"]
+        base = next((g["total_points"] for g in rows_ if g["event"] == start - 1), 0)
+        hist[i]["current"] = [dict(g, total_points=g["total_points"] - base) for g in rows_ if g["event"] >= start]
+        trans[i] = [t for t in trans[i] if t["event"] >= start]
+    finished_gws = [g for g in finished_gws if g >= start]
 
     def picks_for(i, g):
         name = f"picks_{i}_{g}.json" if g in finished_gws else None
@@ -161,7 +170,7 @@ def main():
     def live_for(g):
         return get(f"event/{g}/live/", f"live_{g}.json" if g in finished_gws else None)
 
-    gws = [g for g in range(1, gw + 1)]
+    gws = [g for g in range(start, gw + 1)]
     live = {g: {e["id"]: e["stats"] for e in live_for(g)["elements"]} for g in gws}
     picks = {(i, g): picks_for(i, g) for i in ids for g in gws}
 
@@ -201,7 +210,7 @@ def main():
         chips_used = {c["name"] + ("_2" if c["event"] >= 20 else "_1"): c["event"] for c in h["chips"]}
         by_gw = {c["event"]: c["name"] for c in h["chips"]}
         ft = 1
-        for g in h["current"]:
+        for g in hist_full[i]:
             if g["event"] == 1:
                 continue
             if by_gw.get(g["event"]) not in ("wildcard", "freehit"):
@@ -276,7 +285,7 @@ def main():
 
     months = []
     for ph in B["phases"][1:]:
-        if ph["start_event"] > max(gw, 1):
+        if ph["start_event"] > max(gw, 1) or ph["stop_event"] < start:
             continue
         tot = {i: sum(r["points"] for r in history if r["id"] == i and ph["start_event"] <= r["gw"] <= ph["stop_event"]) for i in ids}
         months.append(dict(name=ph["name"], start=ph["start_event"], stop=ph["stop_event"],
@@ -348,7 +357,8 @@ def main():
         meta=dict(title=CFG.get("site_title") or L["league"]["name"], league=L["league"]["name"], contact=CFG.get("contact", ""),
                   gw=gw, gw_finished=bool(cur and cur["finished"]), live=live_mode, next_gw=nxt["id"] if nxt else None,
                   next_deadline=nxt["deadline_time"] if nxt else None, finished_gws=finished_gws,
-                  app_version=os.environ.get("APP_VERSION", "")[:8]),
+                  app_version=os.environ.get("APP_VERSION", "")[:8],
+                  banter_clubs=CFG.get("banter_clubs") or ["ARS", "LIV", "CHE", "TOT", "MUN"]),
         managers=managers, history=history, awards=awards, transfers=transfers_out, months=months,
         players=players, pltable=pltable, last_result=last_result, fixtures=fixtures,
     )
