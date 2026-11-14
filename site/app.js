@@ -234,7 +234,7 @@
     order.forEach(([id, pts]) => {
       pts.sort((a, b) => a.gw - b.gw);
       const m = M.get(id);
-      const color = isMe(id) ? 'var(--me)' : (m.club && CLUB[m.club] ? CLUB[m.club][0] : 'var(--muted-line)');
+      const color = isMe(id) ? '#ffbf1f' : (m.club && CLUB[m.club] ? CLUB[m.club][0] : '#6b75b8');
       const d = pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.gw).toFixed(1)},${y(p.rank).toFixed(1)}`).join('');
       const path = s('path', { d, fill: 'none', stroke: color, 'stroke-width': isMe(id) ? 4 : 2.2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round', opacity: isMe(id) ? 1 : 0.75 });
       const last = pts[pts.length - 1];
@@ -413,46 +413,58 @@
     const capTot = (hh) => hh.reduce((x, r) => x + r.captain_pts, 0);
     const row = (k, va, vb, higherWins = true) => {
       const aw = higherWins ? va > vb : va < vb, bw = higherWins ? vb > va : vb < va;
-      return h('div', { class: 'vs-row' }, h('span', { class: aw ? 'win' : '', text: va }), h('span', { class: 'k', text: k }), h('span', { class: bw ? 'win' : '', text: vb }));
+      return h('div', { class: 'vs-row' }, h('span', { class: aw ? 'win-a' : '', text: va }), h('span', { class: 'k', text: k }), h('span', { class: bw ? 'win-b' : '', text: vb }));
     };
     const board = $('vs-board');
     board.style.setProperty('--club-a', A.club && CLUB[A.club] ? CLUB[A.club][0] : '#2a3480');
     board.style.setProperty('--club-b', B.club && CLUB[B.club] ? CLUB[B.club][0] : '#2a3480');
     board.replaceChildren(
-      h('div', { class: 'vs-side' }, h('span', { class: 'vs-team', text: A.team }), h('span', { class: 'note', text: A.name }), h('span', { class: 'vs-big', text: A.total })),
+      h('div', { class: 'vs-side a' }, h('span', { class: 'vs-team', text: A.team }), h('span', { class: 'vs-name', text: A.name }), h('span', { class: 'vs-big', text: A.total })),
       h('div', { class: 'vs-mid' }, h('span', { text: Math.abs(A.total - B.total) }), 'pts apart'),
-      h('div', { class: 'vs-side b' }, h('span', { class: 'vs-team', text: B.team }), h('span', { class: 'note', text: B.name }), h('span', { class: 'vs-big', text: B.total })),
+      h('div', { class: 'vs-side b' }, h('span', { class: 'vs-team', text: B.team }), h('span', { class: 'vs-name', text: B.name }), h('span', { class: 'vs-big', text: B.total })),
       h('div', { class: 'vs-rows' },
         row('Gameweeks won', wa, wb), row('League position', ord(A.rank), ord(B.rank), false),
         row('Best week', best(ha), best(hb)), row('Captain points', capTot(ha), capTot(hb)),
         row('Points on bench', A.bench_total, B.bench_total, false), row('Hits taken', A.hits ? `-${A.hits}` : 0, B.hits ? `-${B.hits}` : 0),
         row('Chips in hand', chipsLeft(A).length, chipsLeft(B).length),
         dr ? h('p', { class: 'note', text: `${dr} gameweek${dr > 1 ? 's' : ''} drawn.` }) : null));
-    $('vs-chart-title').textContent = `${A.name}'s lead over ${B.name}, week by week`;
+    $('vs-chart-title').textContent = 'Who was ahead, week by week';
+    const legend = $('vs-legend'); legend.replaceChildren(
+      h('span', { class: 'key a' }, h('i'), `${A.name} ahead (above the line)`),
+      h('span', { class: 'key b' }, h('i'), `${B.name} ahead (below the line)`));
     drawGap($('vs-chart'), ha, hb, A, B);
     const pa = new Set(A.picks.map((p) => p.el)), pb = new Set(B.picks.map((p) => p.el));
-    const list = (title, els) => h('div', { class: 'card' }, h('h3', { class: 'card-title', text: title }),
+    const list = (cls, title, sub, els) => h('div', { class: `card own ${cls}` },
+      h('h3', { class: 'card-title' }, h('i', { class: 'own-dot' }), title, h('span', { class: 'own-count', text: els.length })),
+      h('p', { class: 'note', text: sub }),
       h('div', { class: 'chips-list' }, els.length ? els.map((e) => h('span', { class: 'chip', text: `${player(e).n} (${player(e).t})` })) : h('span', { class: 'note', text: 'None' })));
     $('vs-squads').replaceChildren(
-      list(`Only ${A.name} has`, [...pa].filter((e) => !pb.has(e))),
-      list('Both have', [...pa].filter((e) => pb.has(e))),
-      list(`Only ${B.name} has`, [...pb].filter((e) => !pa.has(e))));
+      list('a', `Only ${A.name} has`, `Where ${A.name} can gain on ${B.name}`, [...pa].filter((e) => !pb.has(e))),
+      list('both', 'Both have', 'These cancel out between them', [...pa].filter((e) => pb.has(e))),
+      list('b', `Only ${B.name} has`, `Where ${B.name} can gain on ${A.name}`, [...pb].filter((e) => !pa.has(e))));
   }
   function drawGap(box, ha, hb, A, B) {
     const pts = ha.map((r) => ({ gw: r.gw, d: r.total - (hb.find((q) => q.gw === r.gw)?.total ?? 0) }));
-    const W = Math.max(box.clientWidth, 300), H = 200, pl = 34, pr = 10, pt = 10, pb = 22;
+    const W = Math.max(box.clientWidth, 300), H = 220, pl = 40, pr = 8, pt = 12, pb = 24;
     const ext = Math.max(10, ...pts.map((p) => Math.abs(p.d)));
-    const x = (g) => pl + (pts.length > 1 ? (g - pts[0].gw) / (pts[pts.length - 1].gw - pts[0].gw) : 0.5) * (W - pl - pr);
+    const step = (W - pl - pr) / Math.max(1, pts.length);
+    const x = (i) => pl + step * (i + 0.5);
     const y = (v) => pt + (1 - (v + ext) / (2 * ext)) * (H - pt - pb);
-    const bw = Math.max(4, (W - pl - pr) / pts.length * 0.6);
-    const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Bar chart of ${A.name}'s points lead over ${B.name} after each gameweek` });
-    [-ext, 0, ext].forEach((v) => { svg.append(s('line', { x1: pl, x2: W - pr, y1: y(v), y2: y(v), class: 'grid' })); svg.append(s('text', { x: pl - 6, y: y(v) + 4, 'text-anchor': 'end', text: v > 0 ? `+${v}` : v })); });
-    pts.forEach((p) => {
-      const r = s('rect', { x: x(p.gw) - bw / 2, width: bw, y: Math.min(y(0), y(p.d)), height: Math.max(1, Math.abs(y(p.d) - y(0))), rx: 2, fill: p.d >= 0 ? 'var(--accent)' : 'var(--down)' });
+    const bw = Math.max(4, Math.min(28, step * 0.62));
+    const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Bar chart of the points gap between ${A.name} and ${B.name} after each gameweek` });
+    [-ext, 0, ext].forEach((v) => {
+      const ln = s('line', { x1: pl, x2: W - pr, y1: y(v), y2: y(v) });
+      ln.style.stroke = v === 0 ? 'rgba(243,245,255,.55)' : 'rgba(160,175,255,.18)';
+      ln.style.strokeWidth = v === 0 ? '1.5' : '1';
+      svg.append(ln, s('text', { x: pl - 8, y: y(v) + 4, 'text-anchor': 'end', text: v > 0 ? `+${v}` : v }));
+    });
+    pts.forEach((p, i) => {
+      const r = s('rect', { x: x(i) - bw / 2, width: bw, y: Math.min(y(0), y(p.d)), height: Math.max(2, Math.abs(y(p.d) - y(0))), rx: 2 });
+      r.style.fill = p.d > 0 ? '#ffbf1f' : p.d < 0 ? '#33d6ff' : '#9aa3d6';
       r.addEventListener('pointermove', (ev) => showTip(ev, `After GW${p.gw}: ${p.d === 0 ? 'level' : p.d > 0 ? `${A.name} ahead by ${p.d}` : `${B.name} ahead by ${-p.d}`}`));
       r.addEventListener('pointerleave', hideTip);
       svg.append(r);
-      if (pts.length <= 20 || p.gw % 2 === 0) svg.append(s('text', { x: x(p.gw), y: H - 6, 'text-anchor': 'middle', text: p.gw }));
+      if (pts.length <= 20 || p.gw % 2 === 0) svg.append(s('text', { x: x(i), y: H - 6, 'text-anchor': 'middle', text: p.gw }));
     });
     box.replaceChildren(svg);
   }
