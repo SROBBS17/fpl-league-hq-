@@ -444,3 +444,8 @@ main { display: grid; gap: 22px; padding-block: 16px 28px; }
 .ev.quiet .ev-main { color: var(--muted); font-weight: 500; font-size: .86rem; }
 .ev.quiet .ev-ico { opacity: .55; font-size: .85rem; }
 .ev-none { font-size: .72rem; opacity: .8; }
+.replay-cap { margin: 0; font-size: .85rem; font-weight: 600; color: var(--fg); border-top: 1px solid var(--line); padding-top: 10px; min-height: 2.6em; }
+.chart svg text { user-select: none; -webkit-user-select: none; }
+.replay-controls { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; }
+.replay-controls input { width: 100%; }
+.replay-gw { min-width: 0; }

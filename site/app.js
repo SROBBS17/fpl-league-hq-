@@ -96,12 +96,16 @@
   }
 
   const tip = $('tip');
+  let tipTimer = null;
   function showTip(ev, text) {
     tip.textContent = text; tip.hidden = false;
+    clearTimeout(tipTimer); tipTimer = setTimeout(() => { tip.hidden = true; }, 2500);
     const x = Math.min(ev.clientX + 12, window.innerWidth - tip.offsetWidth - 8);
     tip.style.left = Math.max(8, x) + 'px'; tip.style.top = Math.max(8, ev.clientY - tip.offsetHeight - 12) + 'px';
   }
   const hideTip = () => { tip.hidden = true; };
+  window.addEventListener('scroll', () => { tip.hidden = true; }, { passive: true });
+  document.addEventListener('pointerdown', (e) => { if (!e.target.closest('svg')) tip.hidden = true; }, { passive: true });
 
   async function copyText(btn, text) {
     try { await navigator.clipboard.writeText(text); btn.textContent = 'Copied'; }
@@ -200,56 +204,136 @@
   }
 
   // ---------- season replay (bump chart) ----------
+  // Built once per data load; a tween moves a playhead along smooth S-curves.
+  const RP = { pos: null, focus: null, raf: null, playing: false, geo: null };
   function setupReplay() {
     const gws = [...new Set(D.history.map((r) => r.gw))].sort((a, b) => a - b);
     const slider = $('replay-slider');
-    slider.max = gws.length; slider.min = 1;
-    if (!slider.dataset.init) { slider.value = gws.length; slider.dataset.init = '1'; }
-    slider.oninput = () => { stopReplay(); drawReplay(+slider.value); };
-    $('replay-play').onclick = () => {
-      if (replayTimer) { stopReplay(); return; }
-      let k = +slider.value >= gws.length ? 1 : +slider.value;
-      $('replay-play').textContent = 'Pause';
-      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      const step = () => { slider.value = k; drawReplay(k); if (k >= gws.length) { stopReplay(); return; } k += 1; };
-      step();
-      replayTimer = setInterval(step, reduce ? 1200 : 700);
-    };
-    drawReplay(+slider.value);
+    slider.min = 1; slider.max = gws.length; slider.step = 'any';
+    if (RP.pos == null || RP.pos > gws.length - 1) RP.pos = gws.length - 1;
+    slider.value = RP.pos + 1;
+    slider.oninput = () => { stopReplay(); tweenTo(+slider.value - 1, 0); };
+    slider.onchange = () => { tweenTo(Math.round(+slider.value - 1), 250); };
+    $('replay-play').onclick = () => (RP.playing ? stopReplay() : playReplay());
+    buildReplay();
   }
-  function stopReplay() { clearInterval(replayTimer); replayTimer = null; $('replay-play').textContent = 'Play'; }
-  function drawReplay(upto) {
+  function buildReplay() {
     const box = $('replay-chart');
-    const gws = [...new Set(D.history.map((r) => r.gw))].sort((a, b) => a - b).slice(0, upto);
+    const gws = [...new Set(D.history.map((r) => r.gw))].sort((a, b) => a - b);
     const n = D.managers.length;
-    const W = Math.max(box.clientWidth, 320), rowH = 26, H = n * rowH + 30, padL = 26, padR = Math.min(140, W * 0.32);
-    const x = (g) => padL + (gws.length > 1 ? (g - gws[0]) / (gws[gws.length - 1] - gws[0]) : 0.5) * (W - padL - padR);
-    const y = (r) => 14 + (r - 1) * rowH;
-    const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `League positions from gameweek 1 to ${gws[gws.length - 1]}` });
-    for (let r = 1; r <= n; r++) svg.append(s('text', { x: 4, y: y(r) + 4, text: r }));
-    gws.forEach((g) => svg.append(s('text', { x: x(g), y: H - 6, 'text-anchor': 'middle', text: gws.length > 12 && g % 2 ? '' : `${g}` })));
-    const by = new Map();
-    D.history.forEach((r) => { if (gws.includes(r.gw)) { if (!by.has(r.id)) by.set(r.id, []); by.get(r.id).push(r); } });
-    const order = [...by.entries()].sort(([a], [b]) => (isMe(a) ? 1 : 0) - (isMe(b) ? 1 : 0));
-    order.forEach(([id, pts]) => {
-      pts.sort((a, b) => a.gw - b.gw);
-      const m = M.get(id);
-      const color = isMe(id) ? '#ffbf1f' : (m.club && CLUB[m.club] ? CLUB[m.club][0] : '#6b75b8');
-      const d = pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.gw).toFixed(1)},${y(p.rank).toFixed(1)}`).join('');
-      const path = s('path', { d, fill: 'none', stroke: color, 'stroke-width': isMe(id) ? 4 : 2.2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round', opacity: isMe(id) ? 1 : 0.75 });
-      const last = pts[pts.length - 1];
-      const dot = s('circle', { cx: x(last.gw), cy: y(last.rank), r: isMe(id) ? 5 : 3.5, fill: color });
-      const label = s('text', { x: x(last.gw) + 8, y: y(last.rank) + 4, text: `${m.name} · ${last.total}` });
-      if (isMe(id)) { label.style.fill = 'var(--me)'; label.style.fontWeight = '700'; }
-      const g = s('g', {}, path, dot, label);
-      g.style.cursor = 'pointer';
-      g.addEventListener('pointermove', (ev) => showTip(ev, `${m.name} (${m.team}): ${ord(last.rank)} after GW${last.gw}, ${last.total} pts`));
-      g.addEventListener('pointerleave', hideTip);
-      svg.append(g);
+    const W = Math.max(box.clientWidth, 320), rowH = 30, padT = 14, padL = 24, padR = Math.min(132, W * 0.34), H = padT + (n - 1) * rowH + 40;
+    const x = (i) => padL + (gws.length > 1 ? i / (gws.length - 1) : 0.5) * (W - padL - padR);
+    const y = (r) => padT + (r - 1) * rowH;
+    const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'League positions after every gameweek' });
+    for (let r = 1; r <= n; r++) {
+      const ln = s('line', { x1: padL, x2: W - padR, y1: y(r), y2: y(r) }); ln.style.stroke = 'rgba(160,175,255,.08)'; svg.append(ln);
+      svg.append(s('text', { x: 4, y: y(r) + 4, text: r }));
+    }
+    gws.forEach((g, i) => { if (gws.length <= 20 || i % 2 === 0) svg.append(s('text', { x: x(i), y: H - 8, 'text-anchor': 'middle', text: g })); });
+    const clipId = 'rpclip';
+    const clipRect = s('rect', { x: 0, y: 0, width: x(0), height: H });
+    svg.append(s('defs', {}, s('clipPath', { id: clipId }, clipRect)));
+    const lines = s('g', { 'clip-path': `url(#${clipId})` });
+    const heads = s('g');
+    svg.append(lines, heads);
+    const series = D.managers.map((m) => {
+      const pts = gws.map((g) => D.history.find((r) => r.id === m.id && r.gw === g) || null);
+      let last = pts.find(Boolean);
+      const ranks = pts.map((p) => { if (p) last = p; return last.rank; });
+      const totals = pts.map((p) => (p ? p.total : 0));
+      const color = isMe(m.id) ? '#ffbf1f' : (m.club && CLUB[m.club] ? CLUB[m.club][0] : '#6b75b8');
+      let d = `M${x(0)},${y(ranks[0])}`;
+      for (let i = 1; i < ranks.length; i++) { const mx = (x(i - 1) + x(i)) / 2; d += `C${mx},${y(ranks[i - 1])} ${mx},${y(ranks[i])} ${x(i)},${y(ranks[i])}`; }
+      const glow = s('path', { d, fill: 'none' }); glow.style.stroke = color; glow.style.strokeWidth = '10'; glow.style.opacity = isMe(m.id) ? '.18' : '0';
+      const path = s('path', { d, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
+      path.style.stroke = color; path.style.strokeWidth = isMe(m.id) ? '4' : '2.4';
+      const hit = s('path', { d, fill: 'none' }); hit.style.stroke = 'transparent'; hit.style.strokeWidth = '18'; hit.style.cursor = 'pointer';
+      lines.append(glow, path, hit);
+      const dot = s('circle', { r: isMe(m.id) ? 6 : 4.5 }); dot.style.fill = color; dot.style.stroke = '#070a1f'; dot.style.strokeWidth = '2';
+      const label = s('text', { x: 10, y: 4, text: m.name });
+      label.style.fontWeight = isMe(m.id) ? '800' : '600'; label.style.fill = isMe(m.id) ? '#ffbf1f' : '#c9cff5'; label.style.fontSize = '12px';
+      const val = s('text', { x: 10, y: 4, text: '' }); val.style.fill = '#9aa3d6'; val.style.fontSize = '11px';
+      const head = s('g', {}, dot, label, val); head.style.cursor = 'pointer';
+      heads.append(head);
+      const pick = (ev) => { ev.stopPropagation(); RP.focus = RP.focus === m.id ? null : m.id; applyFocus(); };
+      hit.addEventListener('click', pick); head.addEventListener('click', pick);
+      return { m, ranks, totals, path, glow, head, label, val, color };
     });
+    svg.addEventListener('click', () => { RP.focus = null; applyFocus(); });
     box.replaceChildren(svg);
-    $('replay-gw').textContent = `GW${gws[gws.length - 1]}`;
+    RP.geo = { gws, x, y, clipRect, series };
+    applyFocus();
+    drawAt(RP.pos);
   }
+  function bez(p0, p1, u) { const k = 1 - u; return k * k * k * p0 + 3 * k * k * u * p0 + 3 * k * u * u * p1 + u * u * u * p1; }
+  function drawAt(pos) {
+    const G = RP.geo; if (!G) return;
+    const last = G.gws.length - 1;
+    pos = Math.max(0, Math.min(last, pos)); RP.pos = pos;
+    const i0 = Math.floor(pos), i1 = Math.min(last, i0 + 1), u = pos - i0;
+    const xa = G.x(i0), xb = G.x(i1), mx = (xa + xb) / 2;
+    const k = 1 - u, hx = i0 === i1 ? xa : k * k * k * xa + 3 * k * k * u * mx + 3 * k * u * u * mx + u * u * u * xb;
+    G.clipRect.setAttribute('width', String(hx + 1));
+    const placed = G.series.map((sr) => ({ sr, yy: i0 === i1 ? G.y(sr.ranks[i0]) : bez(G.y(sr.ranks[i0]), G.y(sr.ranks[i1]), u) })).sort((a, b) => a.yy - b.yy);
+    let prev = -Infinity;
+    placed.forEach(({ sr, yy }) => {
+      const ly = Math.max(yy, prev + 14); prev = ly;
+      sr.head.setAttribute('transform', `translate(${hx},${yy})`);
+      sr.label.setAttribute('y', String(ly - yy + 4));
+      sr.val.setAttribute('y', String(ly - yy + 4));
+      const tot = Math.round(sr.totals[i0] + (sr.totals[i1] - sr.totals[i0]) * u);
+      sr.val.textContent = ` ${tot}`;
+      sr.val.setAttribute('x', String(10 + sr.label.getComputedTextLength() + 2));
+    });
+    $('replay-gw').textContent = `GW${G.gws[Math.round(pos)]}`;
+    const slider = $('replay-slider'); if (document.activeElement !== slider) slider.value = pos + 1;
+    caption();
+  }
+  function applyFocus() {
+    const G = RP.geo; if (!G) return;
+    G.series.forEach((sr) => {
+      const on = RP.focus == null || RP.focus === sr.m.id;
+      const strong = RP.focus === sr.m.id || (RP.focus == null && isMe(sr.m.id));
+      sr.path.style.opacity = on ? '1' : '.15';
+      sr.path.style.strokeWidth = strong ? '4.5' : '2.4';
+      sr.glow.style.opacity = strong ? '.22' : '0';
+      sr.head.style.opacity = on ? '1' : '.2';
+    });
+    caption();
+  }
+  function caption() {
+    const G = RP.geo, cap = $('replay-cap'); if (!G || !cap) return;
+    const sr = G.series.find((q) => q.m.id === (RP.focus ?? me)) || null;
+    if (!sr) { cap.textContent = 'Tap any line to follow one manager.'; return; }
+    const i = Math.round(RP.pos);
+    const best = Math.min(...sr.ranks), worst = Math.max(...sr.ranks);
+    cap.textContent = `${sr.m.name} (${sr.m.team}): ${ord(sr.ranks[i])} after GW${G.gws[i]} on ${sr.totals[i]} pts. Highest ${ord(best)}, lowest ${ord(worst)}.${RP.focus == null ? ' Tap a line to follow someone else.' : ''}`;
+  }
+  function tweenTo(target, dur, done) {
+    cancelAnimationFrame(RP.raf);
+    const from = RP.pos, t0 = performance.now();
+    if (!dur || reduceMotion()) { drawAt(target); if (done) done(); return; }
+    const step = (t) => {
+      const k = Math.min(1, (t - t0) / dur), e = k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+      drawAt(from + (target - from) * e);
+      if (k < 1) RP.raf = requestAnimationFrame(step); else if (done) done();
+    };
+    RP.raf = requestAnimationFrame(step);
+  }
+  function playReplay() {
+    const G = RP.geo; if (!G) return;
+    const last = G.gws.length - 1;
+    RP.playing = true; $('replay-play').textContent = 'Pause';
+    if (RP.pos >= last) drawAt(0);
+    const next = () => {
+      if (!RP.playing) return;
+      const target = Math.min(last, Math.floor(RP.pos + 1e-6) + 1);
+      tweenTo(target, reduceMotion() ? 0 : 650, () => { if (target >= last) { stopReplay(); return; } setTimeout(next, reduceMotion() ? 700 : 120); });
+    };
+    next();
+  }
+  function stopReplay() { RP.playing = false; cancelAnimationFrame(RP.raf); $('replay-play').textContent = 'Play'; }
+  function drawReplay() { buildReplay(); }
 
   // ---------- awards ----------
   const GOOD = new Set(['motw', 'cap_hero', 'transfer_best']);
@@ -926,9 +1010,9 @@
     const v = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'table';
     VIEWS.forEach((x) => { $(x).hidden = x !== v || !D; });
     document.querySelectorAll('.tabs a').forEach((a) => a.classList.toggle('on', a.dataset.tab === v));
-    if (D) { if (v === 'table') drawReplay(+$('replay-slider').value); if (v === 'rivals') drawRivals(); }
+    if (D) { if (v === 'table') buildReplay(); if (v === 'rivals') drawRivals(); }
   }
-  window.addEventListener('hashchange', () => { route(); window.scrollTo(0, 0); });
+  window.addEventListener('hashchange', () => { tip.hidden = true; stopReplay(); route(); window.scrollTo(0, 0); });
 
   function renderAll() {
     M = new Map(D.managers.map((m) => [m.id, m]));
@@ -956,5 +1040,5 @@
   setInterval(tick, 30000);
   setInterval(() => { if (document.visibilityState === 'visible') load(false); }, 120000);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') load(false); });
-  let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (D) { drawReplay(+$('replay-slider').value); drawRivals(); } }, 200); });
+  let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (D) { buildReplay(); drawRivals(); } }, 200); });
 })();
