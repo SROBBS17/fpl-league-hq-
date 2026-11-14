@@ -346,7 +346,8 @@ def main():
         match=match,
         meta=dict(title=CFG.get("site_title") or L["league"]["name"], league=L["league"]["name"], contact=CFG.get("contact", ""),
                   gw=gw, gw_finished=bool(cur and cur["finished"]), live=live_mode, next_gw=nxt["id"] if nxt else None,
-                  next_deadline=nxt["deadline_time"] if nxt else None, finished_gws=finished_gws),
+                  next_deadline=nxt["deadline_time"] if nxt else None, finished_gws=finished_gws,
+                  app_version=os.environ.get("APP_VERSION", "")[:8]),
         managers=managers, history=history, awards=awards, transfers=transfers_out, months=months,
         players=players, pltable=pltable, last_result=last_result, fixtures=fixtures,
     )

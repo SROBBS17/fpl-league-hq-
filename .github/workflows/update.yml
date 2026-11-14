@@ -29,9 +29,12 @@ jobs:
           path: .cache
           key: fpl-cache-${{ github.run_id }}
           restore-keys: fpl-cache-
+      - name: Stamp app version
+        run: sed -i "s/__V__/${GITHUB_SHA::8}/g" site/index.html site/app.js
       - id: data
         name: Fetch FPL data
         env:
+          APP_VERSION: ${{ github.sha }}
           PUBLISHED_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
           FORCE_DEPLOY: ${{ github.event_name != 'schedule' }}
         run: python3 scripts/build_data.py

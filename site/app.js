@@ -10,6 +10,7 @@
   const CHIP_NAMES = { wildcard: 'Wildcard', freehit: 'Free Hit', bboost: 'Bench Boost', '3xc': 'Triple Captain' };
   const POS = { 1: 'GK', 2: 'DEF', 3: 'MID', 4: 'FWD' };
   const ME_KEY = 'lmbyf-me';
+  const APP_V = '__V__';
   const $ = (id) => document.getElementById(id);
   let D = null, M = new Map(), me = null, replayTimer = null;
 
@@ -1025,6 +1026,11 @@
       const r = await fetch(`data.json?t=${Date.now()}`, { cache: 'no-store' });
       if (!r.ok) throw new Error(r.status);
       const data = await r.json();
+      const live = data.meta.app_version;
+      if (APP_V !== '__' + 'V__' && live && live !== APP_V) {
+        let done = false; try { done = sessionStorage.getItem('lmbyf-reload') === live; sessionStorage.setItem('lmbyf-reload', live); } catch (e) { /* ignore */ }
+        if (!done) { location.replace(`${location.pathname}?v=${live}${location.hash}`); return; }
+      }
       if (D && data.meta.hash === D.meta.hash) return;
       D = data;
       $('loading').hidden = true; $('error').hidden = true;
