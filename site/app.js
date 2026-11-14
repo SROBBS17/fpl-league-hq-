@@ -5,7 +5,7 @@
     BRE: ['#E30613', 'Brentford'], CHE: ['#034694', 'Chelsea'], COV: ['#3EA6D6', 'Coventry'], CRY: ['#1B458F', 'Crystal Palace'],
     EVE: ['#003399', 'Everton'], FUL: ['#5b5b5b', 'Fulham'], HUL: ['#F5A12D', 'Hull'], IPS: ['#3A64A3', 'Ipswich'],
     LEE: ['#D4A800', 'Leeds'], LIV: ['#C8102E', 'Liverpool'], MCI: ['#4E9AD3', 'Man City'], MUN: ['#DA291C', 'Man Utd'],
-    NEW: ['#3a3a3a', 'Newcastle'], NFO: ['#DD0000', "Nott'm Forest"], SUN: ['#EB172B', 'Sunderland'], TOT: ['#132257', 'Spurs'],
+    NEW: ['#3a3a3a', 'Newcastle'], NFO: ['#DD0000', "Nott'm Forest"], SUN: ['#EB172B', 'Sunderland'], TOT: ['#132257', 'Spurs'], WHU: ['#7A263A', 'West Ham'],
   };
   const CHIP_NAMES = { wildcard: 'Wildcard', freehit: 'Free Hit', bboost: 'Bench Boost', '3xc': 'Triple Captain' };
   const POS = { 1: 'GK', 2: 'DEF', 3: 'MID', 4: 'FWD' };
@@ -265,7 +265,17 @@
     const clubs = [...new Set(['ARS', 'LIV', 'CHE', 'TOT', 'MUN', ...D.managers.map((m) => m.club).filter(Boolean)])];
     const nm = (code) => (D.pltable.find((t) => t.team === code) || { name: code }).name;
     clubs.forEach((c) => {
-      const r = D.last_result[c]; if (!r) return;
+      const r = D.last_result[c];
+      if (!r) {
+        if (!CLUB[c]) return;
+        const fans = D.managers.filter((m) => m.club === c).map((m) => m.name);
+        const line = `${CLUB[c][1]} aren't in the Premier League this season.`;
+        const card = h('div', { class: 'result D' }, h('span', {}, clubBadge(c), fans.length ? h('span', { class: 'fan-tag', text: fans.join(', ') }) : null),
+          h('span', { class: 'score', text: 'No Premier League football' }), h('span', { class: 'line', text: line }));
+        const btn = h('button', { class: 'copy', type: 'button', text: 'Copy for the group' });
+        btn.addEventListener('click', () => copyText(btn, line));
+        card.append(btn); res.append(card); return;
+      }
       const pos = D.pltable.find((t) => t.team === c);
       const verb = r.res === 'W' ? 'beat' : r.res === 'L' ? 'lost to' : 'drew with';
       const line = `${nm(c)} ${verb} ${nm(r.opp)} ${r.gf}-${r.ga} ${r.ha === 'H' ? 'at home' : 'away'}. Now ${ord(pos.pos)} on ${pos.pts} points.`;
