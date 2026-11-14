@@ -9,7 +9,9 @@
   };
   const CHIP_NAMES = { wildcard: 'Wildcard', freehit: 'Free Hit', bboost: 'Bench Boost', '3xc': 'Triple Captain' };
   const POS = { 1: 'GK', 2: 'DEF', 3: 'MID', 4: 'FWD' };
-  const ME_KEY = 'lmbyf-me';
+  // Each app on this web address keeps its own saved settings (the original keeps its old names).
+  const NS = /fpl-league-hq-/.test(location.pathname) ? 'lmbyf' : 'hq-' + location.pathname.replace(/[^a-z0-9]/gi, '');
+  const ME_KEY = `${NS}-me`;
   const APP_V = '__V__';
   const $ = (id) => document.getElementById(id);
   let D = null, M = new Map(), me = null, replayTimer = null;
@@ -736,8 +738,8 @@
   // ---------- walkout intro ----------
   function playIntro(done) {
     const today = new Date().toISOString().slice(0, 10);
-    if (reduceMotion() || store.get('lmbyf-intro') === today) { done(); return; }
-    store.set('lmbyf-intro', today);
+    if (reduceMotion() || store.get(`${NS}-intro`) === today) { done(); return; }
+    store.set(`${NS}-intro`, today);
     const el = $('intro');
     $('intro-name').textContent = D.meta.title;
     $('intro-kicker').textContent = D.meta.live ? `Gameweek ${D.meta.gw} · Live` : `Gameweek ${D.meta.next_gw || D.meta.gw}`;
@@ -854,7 +856,7 @@
     wState = { cards, i: 0, timer: null };
     $('w-bars').replaceChildren(...cards.map(() => h('span', {}, h('i'))));
     $('wrapped').hidden = false; document.body.style.overflow = 'hidden';
-    store.set('lmbyf-wrapped', String(w.g));
+    store.set(`${NS}-wrapped`, String(w.g));
     showW(0);
   }
   function showW(i) {
@@ -887,7 +889,7 @@
   }
   function maybeWrapped() {
     const g = lastFinished();
-    if (me != null && g && !D.meta.live && store.get('lmbyf-wrapped') !== String(g)) openWrapped(me);
+    if (me != null && g && !D.meta.live && store.get(`${NS}-wrapped`) !== String(g)) openWrapped(me);
   }
 
   // ---------- Match Centre ----------
@@ -913,7 +915,7 @@
     const anyStarted = match.some((f) => f.started);
     $('match-title').textContent = D.meta.live ? `GW${gw} live` : D.meta.gw_finished ? `GW${gw}: full time` : `GW${gw}`;
     $('match-note').textContent = D.meta.live ? 'Scores, scorers and bonus as they happen, with who in the league each one affects. Updates about every 10 minutes.' : 'Every goal, assist, card and bonus from the last gameweek, and who in the league it hit.';
-    const seenKey = `lmbyf-seen-${gw}`;
+    const seenKey = `${NS}-seen-${gw}`;
     let seen = null; try { seen = JSON.parse(store.get(seenKey) || 'null'); } catch (e) { seen = null; }
     const seenSet = new Set(seen || []);
     const allKeys = [];
@@ -1234,7 +1236,7 @@
       const data = await r.json();
       const live = data.meta.app_version;
       if (APP_V !== '__' + 'V__' && live && live !== APP_V) {
-        let done = false; try { done = sessionStorage.getItem('lmbyf-reload') === live; sessionStorage.setItem('lmbyf-reload', live); } catch (e) { /* ignore */ }
+        let done = false; try { done = sessionStorage.getItem(`${NS}-reload`) === live; sessionStorage.setItem(`${NS}-reload`, live); } catch (e) { /* ignore */ }
         if (!done) { location.replace(`${location.pathname}?v=${live}${location.hash}`); return; }
       }
       if (D && data.meta.hash === D.meta.hash) return;
