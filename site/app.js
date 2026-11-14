@@ -58,9 +58,8 @@
     const rx = a.round ? 10.2 : 9.5;
     const out = [];
     out.push(P('M3 46C4 38.5 10.5 35.4 20 35.4S36 38.5 37 46Z', col));
-    out.push(P('M15.6 35.6 20 40.5 24.4 35.6Z', '#ffffff', { opacity: '.9' }));
+    out.push(P('M15.6 35.6 20 40.5 24.4 35.6Z', col === '#eef0f8' ? '#132257' : '#ffffff', { opacity: '.9' }));
     out.push(P('M16.6 28h6.8v7.6c-1 1.4-5.8 1.4-6.8 0Z', sk2));
-    if (a.style === 'cap') out.push(P(`M${20 - rx - .6} 21c-1.4 4-1.2 7 .4 9.5 1-3 1.2-6 1-9.5Z`, hair), P(`M${20 + rx + .6} 21c1.4 4 1.2 7-.4 9.5-1-3-1.2-6-1-9.5Z`, hair));
     out.push(E(20 - rx - .2, 22, 1.7, 2.5, sk2), E(20 + rx + .2, 22, 1.7, 2.5, sk2));
     out.push(E(20, 20.6, rx, 11.6, sk));
     if (a.facial === 'beard') out.push(P(`M${20 - rx + .1} 20.5C${20 - rx} 30 14 33.8 20 33.8S${20 + rx} 30 ${20 + rx - .1} 20.5C28.6 25.4 26 27.4 20 27.6 14 27.4 11.4 25.4 ${20 - rx + .1} 20.5Z`, fc));
@@ -74,6 +73,11 @@
     out.push(...eye(16.2), ...eye(23.8));
     out.push(P('M14.2 17.6q2-1.3 4.1-.2', 'none', { stroke: shade(hair, 1), 'stroke-width': '1.05', 'stroke-linecap': 'round' }), P('M21.7 17.4q2.1-1.1 4.1.2', 'none', { stroke: shade(hair, 1), 'stroke-width': '1.05', 'stroke-linecap': 'round' }));
     const H = (d) => out.push(P(d, hair));
+    if (a.style === 'bald') {
+      out.push(E(16.4, 12.4, 3.2, 1.9, '#ffffff'));
+      out[out.length - 1].setAttribute('opacity', '.28');
+      out.push(P(`M${20 - rx + .2} 21c-.2-2.4.1-4.4.8-5.6l.5 5.8Z`, hair, { opacity: '.35' }), P(`M${20 + rx - .2} 21c.2-2.4-.1-4.4-.8-5.6l-.5 5.8Z`, hair, { opacity: '.35' }));
+    }
     if (a.style === 'swept') { H('M10.3 19C9.4 10.6 13.6 6.6 20.2 6.6c6.4 0 10.8 3.6 9.6 12-1-3.6-2.6-5.4-5-6.2-4 1.6-9.4 1-12.4.6-1.1 1.8-1.7 3.8-2.1 6Z'); H('M22 7.2c2.6-1.6 5.6-1.2 7 .4-2.2-.2-4.2.2-5.6 1.4Z'); }
     if (a.style === 'crop') H(`M${20 - rx + .1} 18C${20 - rx - .3} 11 14 7.8 20 7.8S${20 + rx + .3} 11 ${20 + rx - .1} 18C28.6 14.4 26 12.6 20 12.6S11.4 14.4 ${20 - rx + .1} 18Z`);
     if (a.style === 'slick') { H('M10.7 17.6C10 9.4 14 6 20.5 6S30.4 9.8 29.4 17.6c-.8-4.4-2.6-6-5.9-6.4-4.5-.4-9.5 0-11.5 2.3-.6 1.1-1 2.5-1.3 4.1Z'); out.push(P('M10.8 18.5c.2-2.4.8-4 1.6-5l-.2 6Z', hair, { opacity: '.45' }), P('M29.2 18.5c-.2-2.4-.8-4-1.6-5l.2 6Z', hair, { opacity: '.45' })); }
@@ -84,8 +88,9 @@
       [[12.4, 12.6, 2.1], [14.4, 9.6, 2.4], [17.4, 7.6, 2.5], [20.8, 7, 2.5], [24, 7.8, 2.4], [26.6, 9.8, 2.3], [27.8, 12.8, 2], [16, 12.2, 2], [19.4, 11.6, 2], [22.8, 11.8, 2], [25.4, 12.8, 1.8]].forEach(([x, y, r]) => out.push(s('circle', { cx: x, cy: y, r, fill: hair }), s('circle', { cx: x - r * .3, cy: y - r * .35, r: r * .35, fill: shade(hair, 1.6), opacity: '.5' })));
     }
     if (a.style === 'cap') {
-      if (!a.short) H('M10.4 19c-.6-2-.5-4 .2-5.6l1 5.6Z');
-      out.push(P('M9.6 16.4C9.6 8.2 14 5.4 20 5.4s10.4 2.8 10.4 11Z', a.cap), P('M8.2 16.2c6-1.6 18-1.6 25 .8-7 1.4-19 1.2-25-.8Z', shade(a.cap, .7)), s('circle', { cx: 20, cy: 5.8, r: .9, fill: shade(a.cap, 1.6) }));
+      out.push(P('M10.1 17.2c-.3 1.6-.2 3 .3 4.2l.9-4.4Z', hair), P('M29.9 17.2c.3 1.6.2 3-.3 4.2l-.9-4.4Z', hair));
+      out.push(P('M9.6 16.4C9.6 8.2 14 5.4 20 5.4s10.4 2.8 10.4 11Z', a.cap), P('M8.2 16.2c6-1.6 18-1.6 25 .8-7 1.4-19 1.2-25-.8Z', shade(a.cap, 1.5)), s('circle', { cx: 20, cy: 5.8, r: .9, fill: shade(a.cap, 2.2) }));
+      if (a.logo) { const t = s('text', { x: 20, y: 13.4, 'text-anchor': 'middle', 'font-size': 5.2, 'font-weight': 700, 'letter-spacing': '-.1', text: a.logo }); t.style.fill = '#ffffff'; t.style.fontFamily = 'Teko, Impact, sans-serif'; out.push(t); }
     }
     return out;
   }
@@ -97,7 +102,7 @@
       const id = `av${++clipSeq}`;
       svg.append(s('defs', {}, s('clipPath', { id }, s('path', { d: SHIELD }))),
         s('path', { d: SHIELD, fill: shade(col, .55) }),
-        s('g', { 'clip-path': `url(#${id})` }, s('path', { d: 'M2 30 38 12v6L5 35z', fill: 'rgba(255,255,255,.08)' }), ...avatarParts(a, col)),
+        s('g', { 'clip-path': `url(#${id})` }, s('path', { d: 'M2 30 38 12v6L5 35z', fill: 'rgba(255,255,255,.08)' }), ...avatarParts(a, m.club === 'TOT' ? '#eef0f8' : col)),
         s('path', { d: SHIELD, fill: 'none', stroke: 'rgba(255,255,255,.7)', 'stroke-width': '1.4' }));
       return svg;
     }

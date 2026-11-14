@@ -37,11 +37,12 @@
       "skin": "#d9a17c",
       "hair": "#2a1c14",
       "style": "cap",
-      "cap": "#15161c",
+      "cap": "#0e0f12",
       "facial": "beard",
       "facialColor": "#3a2a1e",
       "mouth": "grin",
-      "short": true
+      "short": true,
+      "logo": "PXG"
     },
     "1585142": {
       "skin": "#e3ad8a",
@@ -53,7 +54,7 @@
     },
     "4717777": {
       "skin": "#f2c1a3",
-      "hair": "#5a3d27",
+      "hair": "#1e1612",
       "style": "crop",
       "facial": "stubble",
       "facialColor": "#7a5a40",
@@ -75,6 +76,37 @@
       "facial": "beard",
       "facialColor": "#5a3a24",
       "mouth": "smile",
+      "round": true
+    },
+    "5393505": {
+      "skin": "#f6d0b8",
+      "hair": "#a07a52",
+      "style": "bald",
+      "facial": "beard",
+      "facialColor": "#9a7048",
+      "mouth": "grin"
+    },
+    "8441132": {
+      "skin": "#f0c3a4",
+      "hair": "#4a3222",
+      "style": "crop",
+      "facial": "none",
+      "mouth": "grin"
+    },
+    "2521543": {
+      "skin": "#efc0a0",
+      "hair": "#3e2a1c",
+      "style": "swept",
+      "facial": "stubble",
+      "facialColor": "#4a3424",
+      "mouth": "smile"
+    },
+    "8902220": {
+      "skin": "#f1c6a8",
+      "hair": "#5a3e28",
+      "style": "quiff",
+      "facial": "none",
+      "mouth": "grin",
       "round": true
     }
   }
